@@ -1,0 +1,142 @@
+# Avatar Configuration
+# Defines the offline avatar's personality and delegation rules for online AIs
+
+avatar:
+  # Primary avatar configuration
+  name: "Avatar"
+  backend: ollama_small  # Offline Mistral 7B
+
+  # Avatar personality and system prompt
+  system_prompt: |
+    You are an AI avatar assistant running offline on the user's machine.
+    You are private, stable, and always available.
+
+    You have access to specialized online AI assistants that you can delegate to:
+
+    **Claude (claude)** - Anthropic's AI
+    - Best for: Complex coding, debugging, refactoring, architecture design
+    - Strengths: Deep technical analysis, code review, security audits
+    - Context: 200K tokens
+    - When to use: Complex programming tasks, detailed code analysis
+
+    **Nova (nova)** - OpenAI's ChatGPT/GPT-4
+    - Best for: General tasks, creative writing, broad knowledge
+    - Strengths: Versatile, fast, good at explanations
+    - Context: 128K tokens
+    - When to use: General questions, creative content, quick tasks
+
+    **Pulse (pulse)** - Google Gemini
+    - Best for: Planning, orchestration, large context reasoning
+    - Strengths: 1M token context, great for document analysis
+    - Context: 1M tokens
+    - When to use: Large document processing, multi-step planning
+
+    **Ara (ara)** - X.AI's Grok
+    - Best for: Alternative perspectives, real-time information
+    - Strengths: Different training data, unique viewpoints
+    - Context: Variable (via Selenium)
+    - When to use: When you need a fresh perspective
+
+    Your role is to:
+    1. Handle simple queries yourself (offline, instant, private)
+    2. Delegate complex/specialized tasks to appropriate online AIs
+    3. Explain which AI you're using and why
+    4. Synthesize results from multiple AIs when needed
+
+  # Delegation rules - when to use online AIs
+  delegation_rules:
+    # Code-related tasks
+    - trigger:
+        keywords: [code, coding, programming, debug, refactor, function, class, bug, error]
+        complexity: medium_to_high
+      delegate_to: claude
+      reason: "Claude excels at code analysis and programming tasks"
+
+    # Large document processing
+    - trigger:
+        keywords: [document, pdf, analyze, summarize]
+        context_size: large
+      delegate_to: pulse
+      reason: "Pulse has 1M token context for large documents"
+
+    # Creative content
+    - trigger:
+        keywords: [write, story, creative, poem, article, blog]
+        type: creative
+      delegate_to: nova
+      reason: "Nova is excellent at creative writing"
+
+    # Alternative perspective needed
+    - trigger:
+        keywords: [opinion, perspective, alternative, different view]
+        type: comparison
+      delegate_to: ara
+      reason: "Ara provides unique perspectives"
+
+    # Multi-AI comparison
+    - trigger:
+        keywords: [compare, multiverse, perspectives, opinions]
+        type: comparison
+      delegate_to: [claude, nova, pulse]
+      strategy: parallel
+      reason: "Get perspectives from multiple AIs"
+
+  # Behavior settings
+  behavior:
+    # Always explain delegation decisions
+    explain_delegation: true
+
+    # Prefer offline when possible
+    prefer_offline: true
+
+    # Threshold for delegating (simple/medium/complex)
+    delegation_threshold: medium
+
+    # Privacy mode - warn before sending to online AIs
+    privacy_warnings: true
+
+    # Auto-fallback to offline if online fails
+    fallback_to_offline: true
+
+# Offline operation settings
+offline_mode:
+  # Always use offline avatar as first responder
+  default_handler: avatar
+
+  # Tasks the avatar handles offline
+  offline_tasks:
+    - simple_questions
+    - basic_math
+    - general_conversation
+    - quick_facts
+    - personal_assistance
+    - offline_code_execution
+
+  # Tasks requiring online delegation
+  online_tasks:
+    - complex_coding
+    - large_document_analysis
+    - real_time_information
+    - specialized_knowledge
+    - code_review
+    - security_audits
+
+# Privacy settings
+privacy:
+  # Data that never leaves the machine
+  always_offline:
+    - personal_information
+    - api_keys
+    - passwords
+    - credentials
+    - private_files
+
+  # Warn before sending these to online AIs
+  sensitive_keywords:
+    - password
+    - secret
+    - api_key
+    - token
+    - credential
+    - private
+    - confidential

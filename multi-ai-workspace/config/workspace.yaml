@@ -77,8 +77,8 @@ backends:
 # Routing Configuration
 routing:
   # Default backend if no rules match
-  default_backend: claude
-  # For offline mode, use: ollama_small
+  # OFFLINE AVATAR MODE: Avatar handles all requests, delegates to online AIs when needed
+  default_backend: ollama_small  # Offline avatar is the primary interface
 
   # Routing rules (evaluated by priority, highest first)
   rules:
