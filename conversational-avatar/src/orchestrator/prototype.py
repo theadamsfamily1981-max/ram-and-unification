@@ -9,6 +9,8 @@ from ..audio_input import AudioRecorder, VoiceActivityDetector
 from ..asr import WhisperASR
 from ..dialogue import DialogueManager
 from ..tts import CoquiTTS
+from ..talking_head import Wav2LipTalkingHead  # Phase 3
+from ..player import MediaPlayer  # Phase 3
 from ..utils.logger import get_logger, setup_logger
 
 logger = get_logger(__name__)
@@ -107,6 +109,54 @@ class VoiceAssistantPrototype:
             logger.warning(f"TTS engine '{engine}' not fully implemented, using coqui")
             self.tts = CoquiTTS(device=device)
 
+        # Talking Head (Phase 3)
+        talking_head_cfg = self.config.get('talking_head', {})
+        self.video_enabled = talking_head_cfg.get('enabled', False)
+
+        if self.video_enabled:
+            logger.info("Initializing talking head video generation...")
+            try:
+                # Get quality mode settings
+                quality_mode = talking_head_cfg.get('quality_mode', 'standard')
+                quality_cfg = talking_head_cfg.get(quality_mode, {})
+
+                # Get model path
+                models_cfg = talking_head_cfg.get('models', {})
+                model_name = quality_cfg.get('model', 'wav2lip')
+                model_path = models_cfg.get(model_name)
+
+                self.talking_head = Wav2LipTalkingHead(
+                    avatar_image_path=talking_head_cfg.get('avatar_image', 'assets/avatars/default.jpg'),
+                    device=talking_head_cfg.get('device', device),
+                    quality_mode=quality_mode,
+                    model_path=model_path,
+                    face_det_batch_size=quality_cfg.get('face_det_batch_size', 4),
+                    wav2lip_batch_size=quality_cfg.get('wav2lip_batch_size', 128),
+                    config=talking_head_cfg
+                )
+                logger.info(f"Talking head initialized in {quality_mode} mode")
+
+                # Initialize media player
+                player_cfg = self.config.get('player', {})
+                self.player = MediaPlayer(
+                    engine=player_cfg.get('engine', 'auto'),
+                    fullscreen=player_cfg.get('fullscreen', False),
+                    window_size=tuple(player_cfg.get('window_size', [1280, 720])),
+                    config=player_cfg
+                )
+                logger.info("Media player initialized")
+
+            except Exception as e:
+                logger.error(f"Failed to initialize video components: {e}")
+                logger.info("Falling back to audio-only mode")
+                self.video_enabled = False
+                self.talking_head = None
+                self.player = None
+        else:
+            logger.info("Video generation disabled in config")
+            self.talking_head = None
+            self.player = None
+
         logger.info("All components initialized successfully")
 
     def run_conversation_turn(self) -> bool:
@@ -187,14 +237,50 @@ class VoiceAssistantPrototype:
 
             logger.info(f"TTS Time: {tts_time:.2f}s")
 
-            # 5. Play audio
-            import soundfile as sf
-            audio, sr = sf.read(audio_path)
-            self.recorder.play_audio(audio)
+            # 5. Generate video (Phase 3) or play audio
+            video_time = 0
+            if self.video_enabled and self.talking_head is not None:
+                try:
+                    logger.info("Generating talking head video...")
+                    print("🎬 Generating video...")
+
+                    start_time = time.time()
+                    video_path = self.talking_head.generate(
+                        audio_path=audio_path,
+                        output_path=Path(f"outputs/video/turn_{self.turn_count:03d}.mp4")
+                    )
+                    video_time = time.time() - start_time
+
+                    logger.info(f"Video Time: {video_time:.2f}s")
+
+                    # Play video
+                    logger.info("Playing video...")
+                    print("📺 Playing video...")
+                    self.player.play_video(video_path)
+
+                except Exception as e:
+                    logger.error(f"Video generation failed: {e}")
+                    logger.info("Falling back to audio-only playback")
+                    print("⚠️  Video failed, playing audio only...")
+
+                    # Fallback to audio
+                    import soundfile as sf
+                    audio, sr = sf.read(audio_path)
+                    self.recorder.play_audio(audio)
+
+            else:
+                # Audio-only mode (Phase 2 behavior)
+                import soundfile as sf
+                audio, sr = sf.read(audio_path)
+                self.recorder.play_audio(audio)
 
             # Print timing summary
-            total_time = asr_time + llm_time + tts_time
-            print(f"\n⏱️  Timing: ASR={asr_time:.1f}s | LLM={llm_time:.1f}s | TTS={tts_time:.1f}s | Total={total_time:.1f}s\n")
+            if video_time > 0:
+                total_time = asr_time + llm_time + tts_time + video_time
+                print(f"\n⏱️  Timing: ASR={asr_time:.1f}s | LLM={llm_time:.1f}s | TTS={tts_time:.1f}s | Video={video_time:.1f}s | Total={total_time:.1f}s\n")
+            else:
+                total_time = asr_time + llm_time + tts_time
+                print(f"\n⏱️  Timing: ASR={asr_time:.1f}s | LLM={llm_time:.1f}s | TTS={tts_time:.1f}s | Total={total_time:.1f}s\n")
 
             return True
 

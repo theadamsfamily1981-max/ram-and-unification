@@ -4,27 +4,35 @@ A modular, real-time conversational AI system that combines speech recognition, 
 
 ## ✨ Features
 
-### Current (Phase 2 - Audio Prototype)
+### ✅ Completed Features (Phases 1-3)
 - ✅ **Voice Input** - Microphone capture with voice activity detection
 - ✅ **Speech Recognition** - OpenAI Whisper (state-of-the-art ASR)
 - ✅ **AI Dialogue** - Local LLM via Ollama (Llama 3.2) or cloud APIs
 - ✅ **Natural TTS** - Coqui TTS with voice cloning
+- ✅ **Talking Head Video** - Wav2Lip lip-sync avatar generation (NEW!)
+- ✅ **Video Playback** - OpenCV/FFplay media player (NEW!)
 - ✅ **Conversational Memory** - Context-aware responses
+- ✅ **Multiple Quality Modes** - Standard (720p) and High (1080p)
 - ✅ **100% Local** - No cloud required (if using local models)
 
 ### Coming Soon
-- 🔜 **Talking Head Video** - Realistic lip-sync avatars (Phase 3)
-- 🔜 **1080p Output** - High-quality video generation (Phase 4)
 - 🔜 **Web UI** - Browser-based interface (Phase 6)
 - 🔜 **Real-time Streaming** - Lower latency video (Phase 5)
+- 🔜 **Enhanced Face Quality** - GFPGAN integration (Phase 5)
 
-## 🎯 Current Status: Phase 2 Complete
+## 🎯 Current Status: Phase 3 Complete
 
 **What Works:**
-- Full voice conversation loop (listen → transcribe → think → speak)
-- Modular architecture ready for video integration
-- Multiple configuration options
-- Voice activity detection for natural conversation flow
+- Full voice + video conversation loop:
+  - Listen (microphone + VAD)
+  - Transcribe (Whisper ASR)
+  - Think (Ollama/GPT)
+  - Speak (Coqui TTS)
+  - **Generate Video (Wav2Lip)** ← NEW!
+  - **Play Video (synchronized audio + video)** ← NEW!
+- 720p @ 25fps (standard mode) or 1080p @ 30fps (high quality mode)
+- Graceful degradation (falls back to audio if video fails)
+- Performance metrics and timing
 
 ## 🚀 Quick Start
 
@@ -84,6 +92,8 @@ python main.py
 
 ## 📖 Usage Example
 
+### With Video (Phase 3)
+
 ```
 🎤 Listening... (speak now)
 👤 You: What is machine learning?
@@ -94,10 +104,107 @@ python main.py
               It powers things like recommendation systems and voice assistants.
 
 🔊 Speaking...
-⏱️  Timing: ASR=0.5s | LLM=1.2s | TTS=1.8s | Total=3.5s
+🎬 Generating video...
+📺 Playing video...
+⏱️  Timing: ASR=0.5s | LLM=1.2s | TTS=1.8s | Video=3.2s | Total=6.7s
 
 ▶️  Continue? (y/n):
 ```
+
+### Audio-Only Mode (Phase 2)
+
+Set `talking_head.enabled: false` in config for audio-only:
+
+```
+🎤 Listening... (speak now)
+👤 You: What is machine learning?
+
+🤔 Thinking...
+🤖 Assistant: Machine learning is a branch of AI...
+
+🔊 Speaking...
+⏱️  Timing: ASR=0.5s | LLM=1.2s | TTS=1.8s | Total=3.5s
+```
+
+## 🎬 Phase 3: Video Generation
+
+### Quick Setup for Video
+
+```bash
+# 1. Download Wav2Lip models
+python scripts/download_models.py --phase3
+
+# 2. Prepare avatar image
+cp /path/to/your/photo.jpg assets/avatars/default.jpg
+
+# 3. Enable video in config
+# Edit config/config.yaml:
+talking_head:
+  enabled: true
+  avatar_image: "assets/avatars/default.jpg"
+  quality_mode: "standard"  # or "high" for 1080p
+
+# 4. Run!
+python main.py
+```
+
+### Demo Scripts
+
+**Text-to-Video Demo** (no mic needed):
+```bash
+python scripts/demo_talking_avatar_from_text.py \
+    --text "Hello, welcome to the talking avatar system!" \
+    --output outputs/demos/demo.mp4 \
+    --play
+```
+
+**Test Video Playback**:
+```bash
+python scripts/play_video_test.py --video outputs/demos/demo.mp4
+```
+
+### Video Quality Modes
+
+#### Standard Mode (720p) - RTX 5060
+- Resolution: 1280x720 @ 25fps
+- Generation time: ~3-4s per 5s audio
+- VRAM: ~1.5GB
+- Best for: Real-time conversation
+
+#### High Quality Mode (1080p) - RTX 3090+
+- Resolution: 1920x1080 @ 30fps
+- Generation time: ~6-7s per 5s audio
+- VRAM: ~3-4GB
+- Best for: Recording, demos, presentations
+
+Configure in `config/config.yaml`:
+```yaml
+talking_head:
+  quality_mode: "high"  # or "standard"
+```
+
+### Troubleshooting Video
+
+**Issue: "No face detected in avatar"**
+- Use a front-facing portrait with clear facial features
+- Ensure good lighting
+- Recommended: 512x512 or larger
+
+**Issue: "CUDA out of memory"**
+```yaml
+# In config.yaml:
+talking_head:
+  quality_mode: "standard"  # Use standard instead of high
+  standard:
+    face_det_batch_size: 2  # Reduce batch size
+```
+
+**Issue: "Video generation is slow"**
+- Use GPU (cuda) not CPU
+- Use `quality_mode: "standard"`
+- Enable FP16: `use_half_precision: true`
+
+See `INSTALL_PHASE3.md` for detailed troubleshooting.
 
 ## ⚙️ Configuration
 
@@ -250,12 +357,20 @@ conversational-avatar/
 
 ## 🛣️ Roadmap
 
-- [x] Phase 1: Architecture design
-- [x] Phase 2: Minimal voice assistant prototype
-- [ ] Phase 3: Talking head/avatar video generation
-- [ ] Phase 4: Full voice + video integration
-- [ ] Phase 5: Quality improvements & optimization
-- [ ] Phase 6: Web UI and advanced controls
+- [x] **Phase 1**: Architecture design ✅
+- [x] **Phase 2**: Minimal voice assistant prototype ✅
+- [x] **Phase 3**: Talking head/avatar video generation ✅ **← YOU ARE HERE**
+- [ ] **Phase 4**: Full voice + video integration (complete)
+- [ ] **Phase 5**: Quality improvements & optimization
+  - [ ] GFPGAN face enhancement
+  - [ ] Real-time streaming
+  - [ ] Performance optimizations
+  - [ ] Batch processing
+- [ ] **Phase 6**: Web UI and advanced controls
+  - [ ] Browser-based interface
+  - [ ] Real-time webcam avatar
+  - [ ] Multiple avatar switching
+  - [ ] Session recording
 
 ## 🔒 Privacy & Ethics
 

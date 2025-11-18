@@ -7,6 +7,12 @@ system:
   save_outputs: true
   max_conversation_turns: 50
 
+  # Global GPU profile (affects ASR, TTS, and Talking Head quality/speed)
+  # "low": Fast, lower quality, works on CPU
+  # "medium": Balanced, good for RTX 5060 (720p video)
+  # "high": Best quality, requires RTX 3090 or better (1080p video)
+  gpu_profile: "medium"
+
 # Audio Input Settings
 audio_input:
   sample_rate: 16000
@@ -77,25 +83,56 @@ tts:
     sample_rate: 22050
     format: "wav"
 
-# Talking Head Settings
+# Talking Head / Video Generation Settings (Phase 3)
 talking_head:
-  engine: "wav2lip"  # wav2lip, sadtalker
-  model: "wav2lip_gan"  # wav2lip, wav2lip_gan
+  enabled: true
+  engine: "wav2lip"
+
+  # Avatar image
   avatar_image: "assets/avatars/default.jpg"
 
-  # Video settings
-  output:
-    resolution: 1080  # 256, 512, 1080
+  # Device and quality
+  device: "cuda"  # cuda, cpu, or cuda:0, cuda:1, etc.
+  quality_mode: "standard"  # "standard" (720p, RTX 5060) or "high" (1080p, RTX 3090)
+
+  # Standard profile (720p, optimized for RTX 5060)
+  standard:
+    resolution:
+      width: 1280
+      height: 720
+    fps: 25
+    model: "wav2lip"  # base model
+    face_det_batch_size: 4
+    wav2lip_batch_size: 128
+
+  # High quality profile (1080p, for RTX 3090 or better)
+  high:
+    resolution:
+      width: 1920
+      height: 1080
     fps: 30
-    quality: "high"  # low, medium, high
+    model: "wav2lip_gan"  # GAN-enhanced model
+    face_det_batch_size: 8
+    wav2lip_batch_size: 128
+    enhance_face: false  # Enable GFPGAN face enhancement (adds 1-2s latency)
+
+  # Output settings
+  output:
     format: "mp4"
     codec: "h264"
+    audio_codec: "aac"
+    audio_bitrate: "192k"
 
-  # Performance
-  batch_size: 1
-  face_det_batch_size: 4
-  upscale: true  # Upscale to 1080p
-  smooth_face: true
+  # Performance optimization
+  cache_preprocessed_face: true
+  use_half_precision: true  # FP16 for faster inference (GPU only)
+
+  # Model paths (relative to project root or absolute)
+  models:
+    wav2lip: "models/wav2lip/wav2lip.pth"
+    wav2lip_gan: "models/wav2lip/wav2lip_gan.pth"
+    face_detection: "models/face_detection/s3fd.pth"
+    gfpgan: "models/gfpgan/GFPGANv1.3.pth"
 
 # Video Player Settings
 player:
