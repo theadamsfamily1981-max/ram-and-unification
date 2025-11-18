@@ -20,6 +20,8 @@ from ..storage.database import ResponseStore
 from ..widgets.perspectives_mixer import PerspectivesMixer
 from ..widgets.context_packs import ContextPackManager
 from ..widgets.cross_posting import CrossPostingPanel
+from ..widgets.github_autopilot import GitHubAutopilot
+from ..widgets.colab_offload import ColabOffload
 
 # Initialize logger
 setup_logger("INFO")
@@ -28,8 +30,8 @@ logger = get_logger(__name__)
 # FastAPI app
 app = FastAPI(
     title="Multi-AI Workspace",
-    description="Intelligent multi-AI orchestration platform (Phase 2)",
-    version="0.2.0"
+    description="Intelligent multi-AI orchestration platform - v1 Complete",
+    version="1.0.0"
 )
 
 # Global instances
@@ -38,6 +40,8 @@ store: Optional[ResponseStore] = None
 perspectives_mixer: Optional[PerspectivesMixer] = None
 context_manager: Optional[ContextPackManager] = None
 cross_posting: Optional[CrossPostingPanel] = None
+github_autopilot: Optional[GitHubAutopilot] = None
+colab_offload: Optional[ColabOffload] = None
 
 
 class ChatRequest(BaseModel):
@@ -58,7 +62,7 @@ class ChatResponse(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """Initialize application on startup."""
-    global router, store, perspectives_mixer, context_manager, cross_posting
+    global router, store, perspectives_mixer, context_manager, cross_posting, github_autopilot, colab_offload
 
     # Initialize storage
     store = ResponseStore("data/workspace.db")
@@ -103,12 +107,20 @@ async def startup_event():
         except Exception as e:
             logger.error(f"Backend '{name}' health check failed: {e}")
 
-    # Initialize Phase 2 widgets
+    # Initialize all widgets
     perspectives_mixer = PerspectivesMixer(router, store)
     context_manager = ContextPackManager(store)
     cross_posting = CrossPostingPanel("exports")
+    github_autopilot = GitHubAutopilot(router, repo_path=".", store=store)
+    colab_offload = ColabOffload()
 
-    logger.info("Phase 2 widgets initialized: Perspectives Mixer, Context Packs, Cross-Posting")
+    logger.info("✅ v1 Complete: All widgets initialized")
+    logger.info("   - Multi-AI Router (4 backends)")
+    logger.info("   - Perspectives Mixer")
+    logger.info("   - Context Packs")
+    logger.info("   - Cross-Posting Panel")
+    logger.info("   - GitHub Autopilot")
+    logger.info("   - Colab Offload")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -289,8 +301,17 @@ async def health_check():
     return JSONResponse({
         "status": "healthy" if all_healthy else "degraded",
         "backends": backend_health,
-        "phase": "2.0",
-        "features": ["storage", "perspectives_mixer", "context_packs", "cross_posting"]
+        "version": "1.0.0",
+        "phase": "v1 Complete",
+        "features": {
+            "multi_ai_router": ["pulse", "nova", "ara", "claude"],
+            "perspectives_mixer": True,
+            "context_packs": True,
+            "cross_posting": True,
+            "github_autopilot": True,
+            "colab_offload": True,
+            "response_storage": True
+        }
     })
 
 
@@ -419,6 +440,147 @@ async def export_response(
         raise HTTPException(status_code=500, detail=result.get("error", "Export failed"))
 
     return JSONResponse(result)
+
+
+# ===== v1 Widget Endpoints: GitHub Autopilot & Colab Offload =====
+
+@app.get("/api/github/status")
+async def github_status():
+    """Get current git repository status."""
+    if not github_autopilot:
+        raise HTTPException(status_code=500, detail="GitHub Autopilot not initialized")
+
+    status = github_autopilot.get_status()
+    return JSONResponse(status)
+
+
+@app.get("/api/github/diff")
+async def github_diff(file_path: Optional[str] = None, staged: bool = False):
+    """Get git diff for changes."""
+    if not github_autopilot:
+        raise HTTPException(status_code=500, detail="GitHub Autopilot not initialized")
+
+    diff = github_autopilot.get_diff(file_path, staged)
+    return JSONResponse({"diff": diff})
+
+
+@app.post("/api/github/explain")
+async def github_explain(
+    file_path: Optional[str] = None,
+    backend: str = "claude"
+):
+    """AI explanation of git changes."""
+    if not github_autopilot:
+        raise HTTPException(status_code=500, detail="GitHub Autopilot not initialized")
+
+    result = await github_autopilot.explain_changes(file_path, backend)
+    return JSONResponse(result)
+
+
+@app.post("/api/github/commit-message")
+async def github_commit_message(
+    backend: str = "claude",
+    style: str = "conventional"
+):
+    """Generate commit message for staged changes."""
+    if not github_autopilot:
+        raise HTTPException(status_code=500, detail="GitHub Autopilot not initialized")
+
+    result = await github_autopilot.generate_commit_message(backend, style)
+    return JSONResponse(result)
+
+
+@app.post("/api/github/review")
+async def github_review(
+    file_path: Optional[str] = None,
+    backend: str = "claude",
+    focus: Optional[List[str]] = None
+):
+    """AI code review of changes."""
+    if not github_autopilot:
+        raise HTTPException(status_code=500, detail="GitHub Autopilot not initialized")
+
+    result = await github_autopilot.review_code(file_path, backend, focus)
+    return JSONResponse(result)
+
+
+@app.post("/api/github/pr-body")
+async def github_pr_body(
+    title: str,
+    base_branch: str = "main",
+    backend: str = "claude"
+):
+    """Generate Pull Request body."""
+    if not github_autopilot:
+        raise HTTPException(status_code=500, detail="GitHub Autopilot not initialized")
+
+    result = await github_autopilot.generate_pr_body(title, base_branch, backend)
+    return JSONResponse(result)
+
+
+@app.get("/api/github/changes")
+async def github_changes():
+    """Get summary of file changes."""
+    if not github_autopilot:
+        raise HTTPException(status_code=500, detail="GitHub Autopilot not initialized")
+
+    cards = github_autopilot.get_file_changes_summary()
+    return JSONResponse({"changes": cards})
+
+
+@app.get("/api/colab/info")
+async def colab_info():
+    """Get Colab Offload setup information."""
+    if not colab_offload:
+        raise HTTPException(status_code=500, detail="Colab Offload not initialized")
+
+    info = colab_offload.get_offload_info()
+    return JSONResponse(info)
+
+
+@app.post("/api/colab/upload")
+async def colab_upload(
+    notebook_path: str,
+    custom_name: Optional[str] = None
+):
+    """Upload notebook to Google Drive for Colab."""
+    if not colab_offload:
+        raise HTTPException(status_code=500, detail="Colab Offload not initialized")
+
+    result = colab_offload.upload_notebook(notebook_path, custom_name)
+
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return JSONResponse(result)
+
+
+@app.post("/api/colab/upload-code")
+async def colab_upload_code(
+    code: str,
+    filename: str = "generated_notebook.ipynb",
+    language: str = "python"
+):
+    """Upload code as Colab notebook."""
+    if not colab_offload:
+        raise HTTPException(status_code=500, detail="Colab Offload not initialized")
+
+    result = colab_offload.upload_code_as_notebook(code, filename, language)
+
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return JSONResponse(result)
+
+
+@app.get("/api/colab/files")
+async def colab_files(limit: int = 20):
+    """List uploaded Colab files."""
+    if not colab_offload:
+        raise HTTPException(status_code=500, detail="Colab Offload not initialized")
+
+    files = colab_offload.list_uploaded_files(limit)
+    return JSONResponse({"files": files})
 
 
 def get_chat_html() -> str:
