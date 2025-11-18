@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  talking-avatar:
+    build: .
+    container_name: talking-avatar-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount directories for persistence
+      - ./models:/app/models
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+      - ./temp:/app/temp
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEVICE=cpu  # Change to 'cuda' if GPU available
+      - DEBUG=false
+      - OUTPUT_FPS=25
+      - OUTPUT_RESOLUTION=512
+    restart: unless-stopped
+    # Uncomment for GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
