@@ -1,0 +1,103 @@
+# Multi-AI Workspace Configuration
+# Phase 1 (v0.1) - Core Infrastructure
+
+# AI Backends Configuration
+backends:
+  # Claude (Anthropic) - Best for complex reasoning, coding, analysis
+  claude:
+    enabled: true
+    provider: claude
+    model: sonnet  # Options: opus, sonnet, haiku
+    # api_key: ${ANTHROPIC_API_KEY}  # Set via environment variable
+    config:
+      max_tokens: 4096
+      temperature: 1.0
+      rate_limit_rpm: 50
+
+  # Nova (OpenAI ChatGPT) - Fast, versatile, good for general tasks
+  nova:
+    enabled: true
+    provider: openai
+    model: gpt-4o  # Options: gpt-4o, gpt-4-turbo, gpt-3.5-turbo
+    # api_key: ${OPENAI_API_KEY}  # Set via environment variable
+    config:
+      max_tokens: 4096
+      temperature: 1.0
+      rate_limit_rpm: 60
+
+  # Pulse (Local Ollama) - Privacy-focused, no cost, orchestrator
+  pulse:
+    enabled: true
+    provider: ollama
+    model: llama3.2  # Options: llama3.2, llama3.1, mistral, phi3
+    base_url: http://localhost:11434
+    config:
+      max_tokens: 4096
+      temperature: 0.7
+
+# Routing Configuration
+routing:
+  # Default backend if no rules match
+  default_backend: claude
+
+  # Routing rules (evaluated by priority, highest first)
+  rules:
+    # Fast responses - use Pulse (local, instant)
+    - tags: [fast, quick, local]
+      backends: [pulse]
+      strategy: single
+      priority: 100
+
+    # Coding tasks - use Claude
+    - tags: [code, coding, debug, refactor, architecture]
+      backends: [claude]
+      strategy: single
+      priority: 90
+
+    # Creative writing - use Nova
+    - tags: [creative, write, story, content]
+      backends: [nova]
+      strategy: single
+      priority: 90
+
+    # Multiverse - get perspectives from all AIs
+    - tags: [multiverse, perspectives, compare, all]
+      backends: [claude, nova, pulse]
+      strategy: parallel
+      priority: 100
+      metadata:
+        description: "Get perspectives from all available AIs"
+
+    # Reasoning chain - sequential processing
+    - tags: [chain, sequential, reasoning]
+      backends: [pulse, claude]  # Pulse drafts, Claude refines
+      strategy: sequential
+      priority: 80
+
+    # Competitive - best of multiple AIs
+    - tags: [competitive, best, race]
+      backends: [claude, nova]
+      strategy: competitive
+      priority: 70
+      metadata:
+        description: "Run multiple AIs and return the best response"
+
+# System Configuration
+system:
+  # Logging
+  log_level: INFO
+  log_file: logs/workspace.log
+
+  # Server
+  host: 0.0.0.0
+  port: 8000
+
+  # Security
+  cors_enabled: true
+  cors_origins:
+    - http://localhost:3000
+    - http://localhost:8000
+
+  # Performance
+  max_concurrent_requests: 10
+  request_timeout: 120  # seconds
