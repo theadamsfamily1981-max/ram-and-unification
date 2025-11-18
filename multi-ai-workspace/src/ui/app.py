@@ -16,6 +16,10 @@ from ..core.router import Router
 from ..core.backend import Context
 from ..utils.config import load_config
 from ..utils.logger import setup_logger, get_logger
+from ..storage.database import ResponseStore
+from ..widgets.perspectives_mixer import PerspectivesMixer
+from ..widgets.context_packs import ContextPackManager
+from ..widgets.cross_posting import CrossPostingPanel
 
 # Initialize logger
 setup_logger("INFO")
@@ -24,12 +28,16 @@ logger = get_logger(__name__)
 # FastAPI app
 app = FastAPI(
     title="Multi-AI Workspace",
-    description="Intelligent multi-AI orchestration platform",
-    version="0.1.0"
+    description="Intelligent multi-AI orchestration platform (Phase 2)",
+    version="0.2.0"
 )
 
-# Global router instance
+# Global instances
 router: Optional[Router] = None
+store: Optional[ResponseStore] = None
+perspectives_mixer: Optional[PerspectivesMixer] = None
+context_manager: Optional[ContextPackManager] = None
+cross_posting: Optional[CrossPostingPanel] = None
 
 
 class ChatRequest(BaseModel):
@@ -50,7 +58,11 @@ class ChatResponse(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """Initialize application on startup."""
-    global router
+    global router, store, perspectives_mixer, context_manager, cross_posting
+
+    # Initialize storage
+    store = ResponseStore("data/workspace.db")
+    logger.info("ResponseStore initialized")
 
     # Load configuration
     config_path = Path("config/workspace.yaml")
@@ -90,6 +102,13 @@ async def startup_event():
             logger.info(f"Backend '{name}': {status}")
         except Exception as e:
             logger.error(f"Backend '{name}' health check failed: {e}")
+
+    # Initialize Phase 2 widgets
+    perspectives_mixer = PerspectivesMixer(router, store)
+    context_manager = ContextPackManager(store)
+    cross_posting = CrossPostingPanel("exports")
+
+    logger.info("Phase 2 widgets initialized: Perspectives Mixer, Context Packs, Cross-Posting")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -269,8 +288,137 @@ async def health_check():
 
     return JSONResponse({
         "status": "healthy" if all_healthy else "degraded",
-        "backends": backend_health
+        "backends": backend_health,
+        "phase": "2.0",
+        "features": ["storage", "perspectives_mixer", "context_packs", "cross_posting"]
     })
+
+
+# ===== Phase 2 API Endpoints =====
+
+@app.get("/api/context-packs")
+async def list_context_packs():
+    """List all available context packs."""
+    if not context_manager:
+        raise HTTPException(status_code=500, detail="Context manager not initialized")
+
+    packs = context_manager.list_packs()
+
+    return JSONResponse({
+        "packs": [pack.to_dict() for pack in packs],
+        "total": len(packs)
+    })
+
+
+@app.get("/api/context-packs/{pack_name}")
+async def get_context_pack(pack_name: str):
+    """Get a specific context pack."""
+    if not context_manager:
+        raise HTTPException(status_code=500, detail="Context manager not initialized")
+
+    pack = context_manager.get_pack(pack_name)
+
+    if not pack:
+        raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
+
+    return JSONResponse(pack.to_dict())
+
+
+@app.post("/api/perspectives/compare")
+async def compare_perspectives(request: ChatRequest):
+    """Compare responses from multiple AIs."""
+    if not perspectives_mixer:
+        raise HTTPException(status_code=500, detail="Perspectives mixer not initialized")
+
+    try:
+        # Build context
+        context = None
+        if request.context:
+            context = Context(**request.context)
+
+        # Perform comparison
+        comparison = await perspectives_mixer.compare(
+            prompt=request.message,
+            backends=request.context.get("backends") if request.context else None,
+            context=context,
+            save_to_store=True
+        )
+
+        # Analyze perspectives
+        analysis = perspectives_mixer.analyze_perspectives(comparison)
+
+        return JSONResponse({
+            "comparison": comparison.to_dict(),
+            "analysis": analysis
+        })
+
+    except Exception as e:
+        logger.error(f"Perspectives comparison error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/conversations")
+async def list_conversations(limit: int = 50, offset: int = 0):
+    """List recent conversations."""
+    if not store:
+        raise HTTPException(status_code=500, detail="Storage not initialized")
+
+    conversations = store.list_conversations(limit=limit, offset=offset)
+
+    return JSONResponse({
+        "conversations": [conv.to_dict() for conv in conversations],
+        "limit": limit,
+        "offset": offset
+    })
+
+
+@app.get("/api/conversations/{conversation_id}")
+async def get_conversation(conversation_id: int):
+    """Get conversation with messages."""
+    if not store:
+        raise HTTPException(status_code=500, detail="Storage not initialized")
+
+    conversation = store.get_conversation(conversation_id)
+
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    messages = store.get_messages(conversation_id)
+
+    return JSONResponse({
+        "conversation": conversation.to_dict(),
+        "messages": [msg.to_dict() for msg in messages],
+        "stats": store.get_conversation_stats(conversation_id)
+    })
+
+
+@app.post("/api/export")
+async def export_response(
+    content: str,
+    format_type: str = "text",
+    metadata: Optional[Dict[str, Any]] = None
+):
+    """Export content in specified format."""
+    if not cross_posting:
+        raise HTTPException(status_code=500, detail="Cross-posting not initialized")
+
+    # Create a mock Response object for export
+    from ..core.backend import Response, AIProvider
+    from datetime import datetime
+
+    response = Response(
+        content=content,
+        provider=AIProvider.CUSTOM,
+        model="unknown",
+        metadata=metadata or {}
+    )
+
+    result = cross_posting.export_response(response, format_type)
+
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Export failed"))
+
+    return JSONResponse(result)
 
 
 def get_chat_html() -> str:
@@ -412,8 +560,8 @@ def get_chat_html() -> str:
 </head>
 <body>
     <div class="header">
-        <h1>Multi-AI Workspace</h1>
-        <div class="subtitle">Intelligent multi-AI orchestration platform</div>
+        <h1>Multi-AI Workspace v0.2</h1>
+        <div class="subtitle">Phase 2: Perspectives Mixer • Context Packs • Response Storage • Export</div>
     </div>
 
     <div class="main">
