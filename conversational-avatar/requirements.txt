@@ -1,0 +1,166 @@
+# Conversational Talking Avatar AI - Requirements
+
+# ============================================================================
+# CORE DEPENDENCIES
+# ============================================================================
+
+# Configuration & Utils
+pyyaml==6.0.1
+python-dotenv==1.0.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Logging & Monitoring
+loguru==0.7.2
+tqdm==4.66.1
+
+# ============================================================================
+# AUDIO INPUT & PROCESSING
+# ============================================================================
+
+# Audio I/O
+sounddevice==0.4.6
+soundfile==0.12.1
+pyaudio==0.2.14  # Alternative to sounddevice
+
+# Voice Activity Detection
+webrtcvad==2.0.10
+
+# Audio Processing
+librosa==0.10.1
+noisereduce==3.0.0
+scipy==1.11.4
+
+# ============================================================================
+# ASR (SPEECH-TO-TEXT)
+# ============================================================================
+
+# OpenAI Whisper (RECOMMENDED)
+openai-whisper==20231117
+# Alternative: faster-whisper==1.0.0  # Faster implementation
+
+# Alternative ASR engines
+# vosk==0.3.45  # Lightweight offline ASR
+# SpeechRecognition==3.10.1  # Google/other APIs
+
+# ============================================================================
+# LLM / DIALOGUE
+# ============================================================================
+
+# Local LLM - Ollama (RECOMMENDED for local)
+ollama==0.1.6
+
+# OpenAI API (for GPT models)
+openai==1.12.0
+
+# Anthropic Claude API
+# anthropic==0.18.1
+
+# Hugging Face Transformers
+transformers==4.37.2
+accelerate==0.27.0
+# torch already listed below
+
+# ============================================================================
+# TTS (TEXT-TO-SPEECH)
+# ============================================================================
+
+# Coqui TTS (RECOMMENDED - high quality, voice cloning)
+TTS==0.22.0
+
+# Alternative TTS engines
+# pyttsx3==2.90  # Fast, offline, robotic
+# bark==0.1.4  # Suno Bark - emotional TTS
+# gTTS==2.5.0  # Google TTS (requires internet)
+
+# ============================================================================
+# TALKING HEAD / VIDEO GENERATION
+# ============================================================================
+
+# Deep Learning Framework
+torch==2.1.2
+torchvision==0.16.2
+torchaudio==2.1.2
+
+# Computer Vision
+opencv-python==4.9.0.80
+opencv-contrib-python==4.9.0.80
+
+# Image Processing
+Pillow==10.2.0
+imageio==2.33.1
+imageio-ffmpeg==0.4.9
+scikit-image==0.22.0
+
+# Face Detection & Landmarks
+face-alignment==1.4.1
+# mediapipe==0.10.9  # Alternative face detection
+
+# Video Processing
+moviepy==1.0.3
+ffmpeg-python==0.2.0
+
+# ============================================================================
+# VIDEO PLAYER / UI
+# ============================================================================
+
+# OpenCV (already listed above for video display)
+
+# PyQt5 (for professional UI)
+PyQt5==5.15.10
+PyQt5-Qt5==5.15.2
+
+# Web-based UI options
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+gradio==4.19.0
+
+# ============================================================================
+# ASYNC & CONCURRENCY
+# ============================================================================
+
+asyncio-mqtt==0.16.2
+aiofiles==23.2.1
+aiohttp==3.9.3
+
+# ============================================================================
+# UTILITIES
+# ============================================================================
+
+numpy==1.24.3
+requests==2.31.0
+
+# Performance monitoring
+psutil==5.9.8
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.5
+
+# ============================================================================
+# OPTIONAL: For model downloading
+# ============================================================================
+
+# gdown==4.7.1  # Download from Google Drive
+# huggingface-hub==0.20.3  # Download from HuggingFace
+
+# ============================================================================
+# INSTALLATION NOTES
+# ============================================================================
+
+# For GPU support (CUDA 11.8):
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# For GPU support (CUDA 12.1):
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# For Mac M1/M2 (MPS):
+# torch, torchvision, torchaudio should work with default install
+
+# System dependencies needed:
+# - FFmpeg: sudo apt-get install ffmpeg (Ubuntu/Debian)
+# - PortAudio: sudo apt-get install portaudio19-dev (for PyAudio)
+# - espeak: sudo apt-get install espeak (for some TTS engines)
+
+# For Whisper performance optimization:
+# pip install faster-whisper
