@@ -46,15 +46,52 @@ backends:
     config:
       max_tokens: 4096
 
+  # ========== OFFLINE MODE - Ollama Local LLMs ==========
+  # Ollama runs completely offline - no API keys or internet required
+  # Install: https://ollama.ai/download
+  # Start server: ollama serve
+  # Pull models: ollama pull mistral:7b
+
+  # Ollama Small - Mistral 7B (fast, low RAM)
+  ollama_small:
+    enabled: true  # Set to true for offline mode
+    provider: ollama
+    model: mistral  # Alias for mistral:7b
+    base_url: http://localhost:11434
+    config:
+      max_tokens: 2048
+      temperature: 0.7
+      top_p: 0.9
+
+  # Ollama Large - Mixtral 8x7B MoE (~30B active params)
+  ollama_large:
+    enabled: false  # Enable for larger model (requires 24GB+ RAM)
+    provider: ollama
+    model: mixtral  # Alias for mixtral:8x7b
+    base_url: http://localhost:11434
+    config:
+      max_tokens: 4096
+      temperature: 0.7
+      top_p: 0.9
+
 # Routing Configuration
 routing:
   # Default backend if no rules match
   default_backend: claude
+  # For offline mode, use: ollama_small
 
   # Routing rules (evaluated by priority, highest first)
   rules:
-    # Fast responses - use Pulse (local, instant)
-    - tags: [fast, quick, local]
+    # Offline mode - use local Ollama
+    - tags: [offline, local, private]
+      backends: [ollama_small]
+      strategy: single
+      priority: 110
+      metadata:
+        description: "Completely offline - no internet required"
+
+    # Fast responses - use Pulse (online) or Ollama (offline)
+    - tags: [fast, quick]
       backends: [pulse]
       strategy: single
       priority: 100

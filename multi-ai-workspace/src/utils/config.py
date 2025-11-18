@@ -13,7 +13,7 @@ from ..core.backend import AIProvider
 from ..core.router import RoutingStrategy, RoutingRule
 from ..integrations.claude_backend import ClaudeBackend
 from ..integrations.nova_backend import NovaBackend
-from ..integrations.pulse_backend import PulseBackend  # Ollama
+from ..integrations.ollama_backend import OllamaBackend  # Ollama (offline)
 from ..integrations.gemini_pulse_backend import GeminiPulseBackend  # Pulse (Gemini)
 from ..integrations.grok_ara_backend import GrokAraBackend  # Ara (Grok)
 from .logger import get_logger
@@ -165,9 +165,9 @@ class ConfigLoader:
             )
 
         elif provider == "ollama":
-            # Legacy Ollama support
-            return PulseBackend(
-                model=config.get("model", "llama3.2"),
+            # Ollama - Local offline LLMs (Mistral, Mixtral, Llama, etc.)
+            return OllamaBackend(
+                model=config.get("model", "mistral"),
                 name=name,
                 base_url=config.get("base_url", "http://localhost:11434"),
                 config=config.get("config", {})
