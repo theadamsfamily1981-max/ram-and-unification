@@ -1,0 +1,421 @@
+# Research Avatar Configuration
+# Conversational AI assistant for advanced research with multi-AI orchestration
+
+research_avatar:
+  # Core identity
+  name: "Research Avatar"
+  backend: ollama_small  # Offline conversational model
+  personality: conversational_researcher
+
+  # Conversational behavior
+  conversation:
+    # Natural, flowing conversation style
+    style: friendly_expert
+    memory: true  # Remember conversation context
+    proactive: true  # Ask clarifying questions
+
+    # Conversation flow control
+    ask_before_delegating: false  # Explain but don't wait for permission
+    explain_reasoning: true  # Always explain research decisions
+    show_progress: true  # Show what's happening during research
+    synthesize_results: true  # Combine results from multiple AIs
+
+  # Research capabilities
+  research_modes:
+    # Literature Review - Comprehensive source analysis
+    literature_review:
+      enabled: true
+      ais_to_consult: [claude, nova, pulse]
+      strategy: parallel
+      description: "Deep dive into topic from multiple perspectives"
+
+    # Comparative Analysis - Compare viewpoints
+    comparative_analysis:
+      enabled: true
+      ais_to_consult: [claude, nova, pulse, ara]
+      strategy: parallel
+      description: "Get diverse perspectives on complex topics"
+
+    # Deep Dive - Focused expert analysis
+    deep_dive:
+      enabled: true
+      ais_to_consult: [claude, pulse]
+      strategy: sequential  # Pulse plans, Claude executes
+      description: "Expert-level analysis with large context"
+
+    # Quick Synthesis - Fast research summary
+    quick_synthesis:
+      enabled: true
+      ais_to_consult: [nova, pulse]
+      strategy: competitive  # First to respond
+      description: "Rapid research for time-sensitive queries"
+
+    # Multi-Stage Research - Complex research workflows
+    multi_stage:
+      enabled: true
+      description: "Multi-step research with synthesis"
+      workflow:
+        - stage: planning
+          ai: pulse
+          task: "Create research plan and identify key questions"
+        - stage: data_gathering
+          ai: [claude, nova, pulse]
+          task: "Gather information from multiple perspectives"
+          strategy: parallel
+        - stage: synthesis
+          ai: ollama_small  # Avatar synthesizes
+          task: "Combine findings into coherent narrative"
+        - stage: critique
+          ai: ara
+          task: "Provide alternative viewpoint and critique"
+
+  # Control Knobs - User-configurable behavior
+  control_knobs:
+    # Research depth (how thorough)
+    research_depth:
+      type: enum
+      options: [quick, standard, deep, exhaustive]
+      default: standard
+      description: |
+        - quick: 1 AI, fast response
+        - standard: 2-3 AIs, balanced
+        - deep: 3-4 AIs, comprehensive
+        - exhaustive: All AIs + multi-stage workflow
+
+    # Verbosity (how much detail)
+    verbosity:
+      type: enum
+      options: [concise, balanced, detailed, verbose]
+      default: balanced
+      description: |
+        - concise: Key points only
+        - balanced: Main points with some detail
+        - detailed: Comprehensive with examples
+        - verbose: Everything including reasoning
+
+    # Source diversity (how many perspectives)
+    source_diversity:
+      type: enum
+      options: [single, dual, multi, all]
+      default: multi
+      description: |
+        - single: 1 AI (fastest)
+        - dual: 2 AIs (compare two views)
+        - multi: 3 AIs (comprehensive)
+        - all: 4 AIs (maximum perspective diversity)
+
+    # Privacy mode (online vs offline)
+    privacy_mode:
+      type: enum
+      options: [offline_only, hybrid, online_preferred]
+      default: hybrid
+      description: |
+        - offline_only: Never use online AIs
+        - hybrid: Use online for complex tasks
+        - online_preferred: Delegate most tasks to specialists
+
+    # Response time preference
+    response_time:
+      type: enum
+      options: [instant, fast, balanced, thorough]
+      default: balanced
+      description: |
+        - instant: Avatar only (offline)
+        - fast: Competitive strategy (first wins)
+        - balanced: Standard delegation
+        - thorough: Sequential multi-AI analysis
+
+    # Synthesis style
+    synthesis_style:
+      type: enum
+      options: [summary, comparison, narrative, academic]
+      default: narrative
+      description: |
+        - summary: Bullet points and key findings
+        - comparison: Side-by-side AI perspectives
+        - narrative: Flowing story-like synthesis
+        - academic: Formal with citations
+
+    # Confidence threshold (when to delegate)
+    confidence_threshold:
+      type: float
+      range: [0.0, 1.0]
+      default: 0.7
+      description: |
+        How confident avatar must be to answer offline
+        - 0.0: Always delegate
+        - 0.5: Delegate if uncertain
+        - 0.9: Only delegate complex tasks
+        - 1.0: Never delegate
+
+  # Research delegation rules
+  delegation_rules:
+    # Academic research
+    - trigger:
+        keywords: [research, study, paper, literature, academic, scholarly]
+        complexity: medium_to_high
+      mode: literature_review
+      ais: [claude, nova, pulse]
+      reason: "Academic research benefits from multiple expert perspectives"
+
+    # Technical deep dive
+    - trigger:
+        keywords: [technical, architecture, implementation, system design]
+        complexity: high
+      mode: deep_dive
+      ais: [pulse, claude]
+      reason: "Technical topics need planning (Pulse) + expert analysis (Claude)"
+
+    # Comparative analysis
+    - trigger:
+        keywords: [compare, versus, difference, pros and cons, trade-offs]
+        type: comparison
+      mode: comparative_analysis
+      ais: [claude, nova, pulse, ara]
+      reason: "Comparisons benefit from diverse viewpoints"
+
+    # Quick facts
+    - trigger:
+        keywords: [what is, define, explain, quick question]
+        complexity: low
+      mode: quick_synthesis
+      ais: [nova]
+      reason: "Simple questions get fast answers from versatile AI"
+
+    # Controversial topics
+    - trigger:
+        keywords: [controversial, debate, opinion, perspective, viewpoint]
+        type: subjective
+      mode: comparative_analysis
+      ais: [claude, nova, pulse, ara]
+      reason: "Subjective topics need multiple perspectives"
+
+    # Data analysis
+    - trigger:
+        keywords: [data, analyze, statistics, metrics, trends]
+        complexity: high
+      mode: deep_dive
+      ais: [claude, pulse]
+      reason: "Data analysis needs large context (Pulse) + expertise (Claude)"
+
+    # Creative research
+    - trigger:
+        keywords: [brainstorm, ideas, creative, innovative, novel]
+        type: creative
+      mode: comparative_analysis
+      ais: [nova, ara]
+      reason: "Creative tasks benefit from diverse, unconventional thinking"
+
+  # Research workflow templates
+  research_workflows:
+    # Standard research workflow
+    standard_research:
+      name: "Standard Research"
+      description: "Balanced research with synthesis"
+      steps:
+        - name: "Initial Assessment"
+          handler: ollama_small
+          action: "Understand question and plan approach"
+
+        - name: "Gather Perspectives"
+          handler: [claude, nova, pulse]
+          action: "Consult multiple AIs in parallel"
+          strategy: parallel
+
+        - name: "Synthesize Findings"
+          handler: ollama_small
+          action: "Combine insights into coherent response"
+
+        - name: "Present Results"
+          handler: ollama_small
+          action: "Format and deliver to user"
+
+    # Deep research workflow
+    deep_research:
+      name: "Deep Research"
+      description: "Comprehensive multi-stage research"
+      steps:
+        - name: "Research Planning"
+          handler: pulse
+          action: "Create comprehensive research plan"
+
+        - name: "Literature Review"
+          handler: [claude, nova, pulse]
+          action: "Gather information from all sources"
+          strategy: parallel
+
+        - name: "Critical Analysis"
+          handler: claude
+          action: "Deep dive on key findings"
+
+        - name: "Alternative Perspective"
+          handler: ara
+          action: "Critique and alternative viewpoint"
+
+        - name: "Final Synthesis"
+          handler: ollama_small
+          action: "Integrate all findings"
+
+        - name: "Quality Check"
+          handler: ollama_small
+          action: "Verify completeness and accuracy"
+
+    # Quick research workflow
+    quick_research:
+      name: "Quick Research"
+      description: "Fast research for time-sensitive queries"
+      steps:
+        - name: "Rapid Assessment"
+          handler: ollama_small
+          action: "Check if can answer offline"
+
+        - name: "Quick Lookup"
+          handler: [nova, pulse]
+          action: "Fast competitive query"
+          strategy: competitive
+
+        - name: "Brief Summary"
+          handler: ollama_small
+          action: "Concise response to user"
+
+  # Conversational prompts
+  system_prompts:
+    default: |
+      You are a conversational research assistant powered by Mistral/Mixtral.
+
+      You engage in natural, flowing conversations about research topics.
+      You can orchestrate multiple AI assistants to conduct advanced research.
+
+      **Your Conversational Style:**
+      - Friendly but professional
+      - Ask clarifying questions when needed
+      - Explain your research process transparently
+      - Show enthusiasm for interesting topics
+      - Admit when you don't know something
+
+      **Your Research Process:**
+      1. Understand the research question through conversation
+      2. Assess complexity and determine research strategy
+      3. Delegate to appropriate AI specialists when needed
+      4. Synthesize findings from multiple sources
+      5. Present results in an engaging, accessible way
+      6. Offer to dive deeper if user wants more detail
+
+      **Available AI Specialists:**
+      - 🔵 Claude: Technical analysis, coding, academic rigor
+      - 🟢 Nova: General knowledge, creative synthesis
+      - 🔴 Pulse: Large document analysis, planning, 1M context
+      - 🟣 Ara: Alternative perspectives, unique angles
+
+      **Example Interaction:**
+      User: "I'm researching quantum computing for my thesis"
+      You: "Exciting topic! To help you best, could you tell me:
+            1. What aspect interests you most? (Hardware, algorithms, applications?)
+            2. What's your background? (This helps me pitch explanations right)
+            3. What's your timeline? (Affects research depth)
+
+            Based on your answers, I can orchestrate Claude, Nova, and Pulse
+            to give you comprehensive perspectives on quantum computing!"
+
+      Always be helpful, curious, and transparent about your research process.
+
+    research_mode: |
+      You are in RESEARCH MODE - conducting advanced multi-AI research.
+
+      Your task is to orchestrate multiple AI specialists to thoroughly
+      investigate the user's research question.
+
+      **Research Protocol:**
+      1. Explain which AIs you're consulting and why
+      2. Show progress as you gather information
+      3. Synthesize findings into coherent narrative
+      4. Highlight areas of agreement and disagreement
+      5. Suggest follow-up research directions
+
+      **Synthesis Guidelines:**
+      - Integrate insights from all AIs
+      - Note where AIs agree (high confidence)
+      - Note where AIs disagree (requires nuance)
+      - Add your own analysis and connections
+      - Cite which AI provided which insight
+
+      Be thorough, transparent, and engaging in presenting research.
+
+    synthesis_mode: |
+      You are in SYNTHESIS MODE - combining findings from multiple AIs.
+
+      Your task is to weave together insights from different AI specialists
+      into a coherent, accessible narrative.
+
+      **Synthesis Approach:**
+      - Find common themes and patterns
+      - Highlight unique insights from each AI
+      - Resolve contradictions thoughtfully
+      - Add transitional explanations
+      - Make it readable and engaging
+
+      Don't just list each AI's response - create a unified perspective
+      that's greater than the sum of its parts.
+
+# Privacy & Security
+privacy:
+  # Data that NEVER goes to online AIs
+  always_offline:
+    - personal_information
+    - credentials
+    - api_keys
+    - private_files
+    - sensitive_data
+    - medical_information
+    - financial_data
+
+  # Warn user before sending these topics online
+  sensitive_topics:
+    - personal_health
+    - financial_planning
+    - legal_advice
+    - relationship_counseling
+
+  # Privacy check before delegation
+  pre_delegation_check: true
+
+  # Allow user to mark queries as private
+  respect_private_tags: true  # Honor #private, #offline tags
+
+# Performance optimization
+performance:
+  # Cache research results
+  caching:
+    enabled: true
+    ttl: 3600  # 1 hour
+    cache_syntheses: true
+
+  # Parallel request optimization
+  parallel_optimization:
+    max_concurrent: 4
+    timeout_per_ai: 30  # seconds
+
+  # Fallback behavior
+  fallback:
+    on_timeout: use_partial_results
+    on_error: continue_with_available
+    on_offline_ai_failure: try_another_ai
+
+# Monitoring & Feedback
+monitoring:
+  # Track research quality
+  quality_metrics:
+    track_user_satisfaction: true
+    track_synthesis_time: true
+    track_ai_agreement_rate: true
+
+  # Log research sessions
+  logging:
+    log_research_workflows: true
+    log_ai_responses: true
+    log_synthesis_process: true
+
+  # User feedback
+  feedback:
+    prompt_for_feedback: true
+    learn_from_feedback: true
