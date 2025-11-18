@@ -13,7 +13,9 @@ from ..core.backend import AIProvider
 from ..core.router import RoutingStrategy, RoutingRule
 from ..integrations.claude_backend import ClaudeBackend
 from ..integrations.nova_backend import NovaBackend
-from ..integrations.pulse_backend import PulseBackend
+from ..integrations.pulse_backend import PulseBackend  # Ollama
+from ..integrations.gemini_pulse_backend import GeminiPulseBackend  # Pulse (Gemini)
+from ..integrations.grok_ara_backend import GrokAraBackend  # Ara (Grok)
 from .logger import get_logger
 
 logger = get_logger(__name__)
@@ -133,7 +135,37 @@ class ConfigLoader:
                 config=config.get("config", {})
             )
 
-        elif provider == "ollama" or provider == "pulse":
+        elif provider == "gemini" or provider == "pulse":
+            # Pulse = Gemini (Google)
+            api_key = config.get("api_key") or self._get_env_var("GOOGLE_API_KEY") or self._get_env_var("GEMINI_API_KEY")
+            if not api_key:
+                raise ConfigValidationError(
+                    f"No API key for Gemini backend '{name}'",
+                    f"backends.{name}.api_key"
+                )
+
+            return GeminiPulseBackend(
+                api_key=api_key,
+                model=config.get("model", "gemini-1.5-flash"),
+                name=name,
+                config=config.get("config", {})
+            )
+
+        elif provider == "grok" or provider == "ara":
+            # Ara = Grok (X.AI) via Selenium
+            username = config.get("username") or self._get_env_var("X_USERNAME")
+            password = config.get("password") or self._get_env_var("X_PASSWORD")
+
+            return GrokAraBackend(
+                username=username,
+                password=password,
+                name=name,
+                headless=config.get("headless", True),
+                config=config.get("config", {})
+            )
+
+        elif provider == "ollama":
+            # Legacy Ollama support
             return PulseBackend(
                 model=config.get("model", "llama3.2"),
                 name=name,

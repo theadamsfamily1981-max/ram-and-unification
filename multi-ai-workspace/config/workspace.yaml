@@ -3,7 +3,7 @@
 
 # AI Backends Configuration
 backends:
-  # Claude (Anthropic) - Best for complex reasoning, coding, analysis
+  # Claude (Claude.ai) - Best for complex reasoning, coding, analysis
   claude:
     enabled: true
     provider: claude
@@ -14,7 +14,7 @@ backends:
       temperature: 1.0
       rate_limit_rpm: 50
 
-  # Nova (OpenAI ChatGPT) - Fast, versatile, good for general tasks
+  # Nova (ChatGPT/OpenAI) - Fast, versatile, good for general tasks
   nova:
     enabled: true
     provider: openai
@@ -25,15 +25,26 @@ backends:
       temperature: 1.0
       rate_limit_rpm: 60
 
-  # Pulse (Local Ollama) - Privacy-focused, no cost, orchestrator
+  # Pulse (Google Gemini) - Internal orchestrator/planner
   pulse:
     enabled: true
-    provider: ollama
-    model: llama3.2  # Options: llama3.2, llama3.1, mistral, phi3
-    base_url: http://localhost:11434
+    provider: gemini
+    model: gemini-1.5-flash  # Options: gemini-pro, gemini-1.5-pro, gemini-1.5-flash
+    # api_key: ${GOOGLE_API_KEY}  # Set via environment variable
+    config:
+      max_tokens: 2048
+      temperature: 0.9
+      rate_limit_rpm: 60
+
+  # Ara (Grok/X.AI) - Alternative perspective via Selenium
+  ara:
+    enabled: false  # Requires X.com credentials and Chrome
+    provider: grok
+    # username: ${X_USERNAME}  # X.com username
+    # password: ${X_PASSWORD}  # X.com password
+    headless: true  # Run browser in headless mode
     config:
       max_tokens: 4096
-      temperature: 0.7
 
 # Routing Configuration
 routing:
@@ -62,7 +73,7 @@ routing:
 
     # Multiverse - get perspectives from all AIs
     - tags: [multiverse, perspectives, compare, all]
-      backends: [claude, nova, pulse]
+      backends: [claude, nova, pulse, ara]
       strategy: parallel
       priority: 100
       metadata:

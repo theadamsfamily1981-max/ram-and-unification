@@ -9,8 +9,11 @@ python-multipart==0.0.6
 
 # AI Backend APIs
 anthropic==0.18.1          # Claude (Anthropic)
-openai==1.12.0             # ChatGPT/GPT-4 (OpenAI)
+openai==1.12.0             # Nova - ChatGPT/GPT-4 (OpenAI)
+google-generativeai==0.3.2 # Pulse - Gemini (Google)
 httpx==0.26.0              # For Ollama HTTP calls
+selenium==4.15.2           # Ara - Grok (Selenium automation)
+webdriver-manager==4.0.1   # Auto-manage Chrome/Firefox drivers
 
 # Configuration & Data
 pyyaml==6.0.1
