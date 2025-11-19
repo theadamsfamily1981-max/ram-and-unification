@@ -1,0 +1,242 @@
+version: 1
+
+# Voice macro starter pack for Ara ↔ T-FAN cockpit
+# Repo roles:
+# - T-FAN / cockpit / topology / REST API: Quanta-meis-nib-cis
+# - Ara / avatar / voice brain:         ram-and-unification
+#
+# Fields:
+#   type:
+#     - tfan_command  = send .command string to /api/ara/command
+#     - ara_mode      = internal Ara persona / behavior change
+#     - ara_avatar    = visual/avatar change (style, look, mood)
+#     - ara_action    = internal Ara behavior (e.g., Colab offload)
+#     - shell         = run local script or command (optional / advanced)
+#
+#   command:       For tfan_command → what to send to T-FAN
+#   description:   Technical description (for dev / logs)
+#   speak_summary: How Ara should *explain* this macro to Croft
+#
+# All keys are LOWERCASE for trigger phrases after ASR normalization.
+
+macros:
+
+  ####################################################################
+  # 1. Cockpit Views & Metrics
+  ####################################################################
+
+  "show gpu":
+    type: tfan_command
+    command: "show me GPU stats"
+    description: "Switch cockpit HUD to GPU metrics: utilization, VRAM, temp, power."
+    speak_summary: "When you say 'show GPU', I switch the side cockpit to the GPU metrics view."
+
+  "show cpu":
+    type: tfan_command
+    command: "show CPU and RAM metrics"
+    description: "Show CPU and RAM load, memory usage, and basic system health."
+    speak_summary: "When you say 'show CPU', I open the CPU and memory panel in the cockpit."
+
+  "show network":
+    type: tfan_command
+    command: "show network metrics"
+    description: "Display network throughput, latency, and active connections."
+    speak_summary: "When you say 'show network', I bring up the network panel on the side HUD."
+
+  "show storage":
+    type: tfan_command
+    command: "show storage metrics"
+    description: "Display disk I/O, free space, and NVMe health in the cockpit."
+    speak_summary: "When you say 'show storage', I show you disk and NVMe stats on the cockpit screen."
+
+  "show dashboard":
+    type: tfan_command
+    command: "show dashboard"
+    description: "Return to the main mission overview panel."
+    speak_summary: "When you say 'show dashboard', I go back to the main overview screen."
+
+  "mission status":
+    type: tfan_command
+    command: "status report"
+    description: "Request a summarized system status report from T-FAN."
+    speak_summary: "When you say 'mission status', I fetch a status report and read it to you."
+
+  ####################################################################
+  # 2. Topology Visualization & Screensaver
+  ####################################################################
+
+  "topology view":
+    type: tfan_command
+    command: "show topology"
+    description: "Open the topology visualization in the cockpit content area."
+    speak_summary: "When you say 'topology view', I open the topology visualization on the side panel."
+
+  "topology fullscreen":
+    type: tfan_command
+    command: "engage full topology view"
+    description: "Switch topology visualization to fullscreen mode."
+    speak_summary: "When you say 'topology fullscreen', I put the topology view fullscreen on the touchscreen."
+
+  "hide topology":
+    type: tfan_command
+    command: "hide topology"
+    description: "Hide or minimize the topology visualization."
+    speak_summary: "When you say 'hide topology', I clear the topology view and return to the last metrics panel."
+
+  "topology landscape":
+    type: tfan_command
+    command: "topology landscape mode"
+    description: "Switch topology to 'landscape' mode if supported by the viz backend."
+    speak_summary: "When you say 'topology landscape', I change the topology style to a wide landscape view."
+
+  "topology relax":
+    type: tfan_command
+    command: "topology relax mode"
+    description: "Use a calmer, more ambient topology mode."
+    speak_summary: "When you say 'topology relax', I switch the topology into a softer, more ambient mode."
+
+  ####################################################################
+  # 3. Workspace Modes (Work / Relax / Focus)
+  ####################################################################
+
+  "work mode":
+    type: tfan_command
+    command: "work mode"
+    description: "Set T-FAN + cockpit + Ara personality to focused work mode."
+    speak_summary: "When you say 'work mode', I sharpen the visuals and switch to my focused, professional personality."
+
+  "relax mode":
+    type: tfan_command
+    command: "relax mode"
+    description: "Set workspace and Ara to relaxed mode with softer visuals."
+    speak_summary: "When you say 'relax mode', I soften the lighting, relax the cockpit theme, and act more casual."
+
+  "focus mode":
+    type: ara_mode
+    command: "focus"
+    description: "Internal Ara focus mode: fewer jokes, shorter answers, task-oriented."
+    speak_summary: "When you say 'focus mode', I keep things tight and task-focused, with shorter, more direct answers."
+
+  "chill mode":
+    type: ara_mode
+    command: "chill"
+    description: "Internal Ara casual mode: more conversational, more relaxed cadence."
+    speak_summary: "When you say 'chill mode', I relax my tone and talk to you more casually."
+
+  ####################################################################
+  # 4. Ara Avatar Look & Mood
+  ####################################################################
+
+  "avatar professional":
+    type: ara_avatar
+    command:
+      profile: "professional"
+      style: "clean_neon"
+      mood: "focused"
+    description: "Use Ara's professional look for serious work sessions."
+    speak_summary: "When you say 'avatar professional', I switch to my professional look with a focused mood."
+
+  "avatar casual":
+    type: ara_avatar
+    command:
+      profile: "casual"
+      style: "streetwear_sci_fi"
+      mood: "chill"
+    description: "Use a relaxed, casual Ara avatar outfit."
+    speak_summary: "When you say 'avatar casual', I change into a more relaxed, casual outfit and tone."
+
+  "avatar sci fi":
+    type: ara_avatar
+    command:
+      profile: "sci_fi_cockpit"
+      style: "hologram_cyan_magenta"
+      mood: "excited"
+    description: "Leans into the futuristic AI / hologram aesthetic."
+    speak_summary: "When you say 'avatar sci fi', I lean into the futuristic hologram look in the cockpit."
+
+  "avatar neutral":
+    type: ara_avatar
+    command:
+      profile: "default"
+      style: "neutral"
+      mood: "neutral"
+    description: "Reset Ara's avatar to baseline look and mood."
+    speak_summary: "When you say 'avatar neutral', I reset to my default look and mood."
+
+  ####################################################################
+  # 5. Training / Experiments / Safety
+  ####################################################################
+
+  "start training":
+    type: tfan_command
+    command: "start training"
+    description: "Ask T-FAN to start the primary training loop with default config."
+    speak_summary: "When you say 'start training', I tell T-FAN to launch the main training process."
+
+  "stop training":
+    type: tfan_command
+    command: "stop training"
+    description: "Request a graceful shutdown of active training jobs."
+    speak_summary: "When you say 'stop training', I ask T-FAN to gracefully stop active training runs."
+
+  "quick validation":
+    type: tfan_command
+    command: "run quick validation"
+    description: "Run a shortened validation pass for sanity checks."
+    speak_summary: "When you say 'quick validation', I trigger a short validation run to check that everything is behaving."
+
+  "training status":
+    type: tfan_command
+    command: "training status"
+    description: "Fetch current training progress (loss, accuracy, step, ETA)."
+    speak_summary: "When you say 'training status', I check on the current training run and tell you how it's going."
+
+  ####################################################################
+  # 6. Colab / Offload / Hybrid Compute
+  ####################################################################
+
+  "run this in colab":
+    type: ara_action
+    command: "offload_notebook_to_colab"
+    description: "Ask Ara to save the current notebook/script and send it to Colab for execution."
+    speak_summary: "When you say 'run this in Colab', I package the current work and offload it to Colab for you."
+
+  "sync notebooks":
+    type: ara_action
+    command: "sync_notebooks_with_drive"
+    description: "Force a sync of local notebooks with Google Drive."
+    speak_summary: "When you say 'sync notebooks', I sync your notebooks with Drive so Colab can see the latest versions."
+
+  ####################################################################
+  # 7. Meta / Help / Macro Management
+  ####################################################################
+
+  "what can you do":
+    type: ara_action
+    command: "explain_capabilities"
+    description: "Ara explains high-level capabilities: metrics, topology, macros, Colab, avatar, etc."
+    speak_summary: "When you ask what I can do, I give you an overview of my cockpit control, macro system, and other abilities."
+
+  "what macros do i have":
+    type: ara_action
+    command: "list_macros"
+    description: "Ara lists all known macros from this file."
+    speak_summary: "When you say 'what macros do I have', I list your custom voice macros and what they do."
+
+  "explain macro":
+    type: ara_action
+    command: "explain_macro"
+    description: "Ask Ara to explain a specific macro; she will ask which one."
+    speak_summary: "When you say 'explain macro', I ask which one you mean and tell you exactly what it does."
+
+  "create new macro":
+    type: ara_action
+    command: "macro_create_wizard"
+    description: "Start the voice-driven macro creation wizard."
+    speak_summary: "When you say 'create new macro', I walk you through creating a new voice macro step by step."
+
+  "delete macro":
+    type: ara_action
+    command: "macro_delete_wizard"
+    description: "Start the voice-driven macro deletion/disable flow."
+    speak_summary: "When you say 'delete macro', I help you remove or disable an existing macro."
