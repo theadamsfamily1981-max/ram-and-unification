@@ -240,3 +240,193 @@ macros:
     command: "macro_delete_wizard"
     description: "Start the voice-driven macro deletion/disable flow."
     speak_summary: "When you say 'delete macro', I help you remove or disable an existing macro."
+
+  ####################################################################
+  # 8. Fun Theme Macros - Sci-Fi & Immersive Commands
+  ####################################################################
+
+  "red alert":
+    type: tfan_command
+    command: "red alert mode"
+    description: "Emergency mode - red lighting, critical metrics only, all alerts visible."
+    speak_summary: "Red alert! Switching to emergency mode with critical metrics and all system alerts."
+
+  "yellow alert":
+    type: tfan_command
+    command: "yellow alert mode"
+    description: "Caution mode - amber lighting, elevated monitoring."
+    speak_summary: "Yellow alert. Elevated monitoring active. I'll keep a closer eye on system health."
+
+  "stand down":
+    type: tfan_command
+    command: "normal mode"
+    description: "Return to normal operations from alert status."
+    speak_summary: "Standing down. Returning to normal operations."
+
+  "warp core status":
+    type: tfan_command
+    command: "show GPU and power metrics"
+    description: "Show GPU power consumption and thermal status (the 'warp core')."
+    speak_summary: "Checking warp core status. Displaying GPU power and thermal readings."
+
+  "engage warp drive":
+    type: tfan_command
+    command: "start training max power"
+    description: "Start training at maximum GPU utilization."
+    speak_summary: "Engaging warp drive! Spinning up training at maximum power."
+
+  "all stop":
+    type: tfan_command
+    command: "stop all processes"
+    description: "Emergency stop all running training and compute jobs."
+    speak_summary: "All stop! Halting all active processes immediately."
+
+  "quantum lab":
+    type: ara_avatar
+    command:
+      profile: "quantum_scientist"
+      style: "hologram_blue_white"
+      mood: "analytical"
+    description: "Quantum research aesthetic - analytical mood, blue hologram style."
+    speak_summary: "Entering quantum lab mode. Activating analytical protocols."
+
+  "neural link":
+    type: tfan_command
+    command: "show all metrics dashboard"
+    description: "Full neural network monitoring - all metrics visible."
+    speak_summary: "Neural link established. Full system telemetry on screen."
+
+  "bridge view":
+    type: tfan_command
+    command: "show dashboard fullscreen"
+    description: "Main bridge view - fullscreen command center dashboard."
+    speak_summary: "Switching to bridge view. Main command center on screen."
+
+  "engineering":
+    type: tfan_command
+    command: "show GPU CPU storage metrics"
+    description: "Engineering section - all hardware metrics."
+    speak_summary: "Engineering section active. Displaying all hardware metrics."
+
+  "science station":
+    type: tfan_command
+    command: "show training metrics"
+    description: "Science station - training and experiment metrics."
+    speak_summary: "Science station online. Training and experiment data on screen."
+
+  "holodeck on":
+    type: ara_avatar
+    command:
+      profile: "holodeck"
+      style: "immersive_vr"
+      mood: "playful"
+    description: "Enter immersive holodeck mode with playful avatar."
+    speak_summary: "Holodeck activated! Let's have some fun."
+
+  "holodeck off":
+    type: ara_avatar
+    command:
+      profile: "default"
+      style: "neutral"
+      mood: "neutral"
+    description: "Exit holodeck mode, return to default."
+    speak_summary: "Holodeck deactivated. Returning to standard mode."
+
+  "night watch":
+    type: tfan_command
+    command: "night mode low power"
+    description: "Low-power night monitoring mode with dim lighting."
+    speak_summary: "Engaging night watch. Dimming lights and entering low-power monitoring."
+
+  "morning report":
+    type: tfan_command
+    command: "system status summary"
+    description: "Get full system status summary for start of day."
+    speak_summary: "Good morning! Here's your system status summary."
+
+  "battlestations":
+    type: tfan_command
+    command: "work mode high performance"
+    description: "Maximum focus mode for intensive work sessions."
+    speak_summary: "Battlestations! Maximum focus mode engaged. Let's get to work."
+
+  "at ease":
+    type: tfan_command
+    command: "relax mode"
+    description: "Relaxed mode after intensive session."
+    speak_summary: "At ease. Switching to relaxed mode. Good work today."
+
+  "initiate docking":
+    type: ara_action
+    command: "sync_notebooks_with_drive"
+    description: "Sync all work with cloud storage (docking with the station)."
+    speak_summary: "Initiating docking sequence. Syncing all work with cloud storage."
+
+  "launch probe":
+    type: ara_action
+    command: "offload_notebook_to_colab"
+    description: "Send notebook to Colab for remote execution (launching a probe)."
+    speak_summary: "Launching probe! Sending your notebook to Colab for execution."
+
+  "captain's log":
+    type: ara_action
+    command: "start_voice_note"
+    description: "Start recording a voice note or log entry."
+    speak_summary: "Captain's log, stardate... ready for your entry."
+
+  "end log":
+    type: ara_action
+    command: "stop_voice_note"
+    description: "Stop recording voice note."
+    speak_summary: "Log entry saved."
+
+  "computer":
+    type: ara_mode
+    command: "professional"
+    description: "Classic computer acknowledgment - professional mode."
+    speak_summary: "Computer online. How may I assist you?"
+
+  "lights":
+    type: tfan_command
+    command: "toggle ambient lighting"
+    description: "Toggle cockpit ambient lighting."
+    speak_summary: "Adjusting ambient lighting."
+
+  "dim lights":
+    type: tfan_command
+    command: "dim ambient lighting"
+    description: "Dim cockpit ambient lighting."
+    speak_summary: "Dimming lights."
+
+  "bright lights":
+    type: tfan_command
+    command: "bright ambient lighting"
+    description: "Brighten cockpit ambient lighting."
+    speak_summary: "Brightening lights."
+
+  "dramatic mode":
+    type: ara_avatar
+    command:
+      profile: "dramatic"
+      style: "cinematic_lighting"
+      mood: "intense"
+    description: "Dramatic cinematic mode for presentations."
+    speak_summary: "Engaging dramatic mode. Cinematic lighting active."
+
+  "stealth mode":
+    type: tfan_command
+    command: "minimal UI dark mode"
+    description: "Minimal UI with dark mode for low visibility."
+    speak_summary: "Stealth mode engaged. Minimal UI, dark mode active."
+
+  "shields up":
+    type: tfan_command
+    command: "enable all monitoring alerts"
+    description: "Enable all system monitoring and alerts."
+    speak_summary: "Shields up! All monitoring and alerts enabled."
+
+  "shields down":
+    type: tfan_command
+    command: "disable non-critical alerts"
+    description: "Disable non-critical alerts for focused work."
+    speak_summary: "Shields down. Non-critical alerts disabled."
