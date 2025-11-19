@@ -1,0 +1,151 @@
+# Multi-AI Workspace Configuration
+# Phase 1 (v0.1) - Core Infrastructure
+
+# AI Backends Configuration
+backends:
+  # Claude (Claude.ai) - Best for complex reasoning, coding, analysis
+  claude:
+    enabled: true
+    provider: claude
+    model: sonnet  # Options: opus, sonnet, haiku
+    # api_key: ${ANTHROPIC_API_KEY}  # Set via environment variable
+    config:
+      max_tokens: 4096
+      temperature: 1.0
+      rate_limit_rpm: 50
+
+  # Nova (ChatGPT/OpenAI) - Fast, versatile, good for general tasks
+  nova:
+    enabled: true
+    provider: openai
+    model: gpt-4o  # Options: gpt-4o, gpt-4-turbo, gpt-3.5-turbo
+    # api_key: ${OPENAI_API_KEY}  # Set via environment variable
+    config:
+      max_tokens: 4096
+      temperature: 1.0
+      rate_limit_rpm: 60
+
+  # Pulse (Google Gemini) - Internal orchestrator/planner
+  pulse:
+    enabled: true
+    provider: gemini
+    model: gemini-1.5-flash  # Options: gemini-pro, gemini-1.5-pro, gemini-1.5-flash
+    # api_key: ${GOOGLE_API_KEY}  # Set via environment variable
+    config:
+      max_tokens: 2048
+      temperature: 0.9
+      rate_limit_rpm: 60
+
+  # Ara (Grok/X.AI) - Alternative perspective via Selenium
+  ara:
+    enabled: false  # Requires X.com credentials and Chrome
+    provider: grok
+    # username: ${X_USERNAME}  # X.com username
+    # password: ${X_PASSWORD}  # X.com password
+    headless: true  # Run browser in headless mode
+    config:
+      max_tokens: 4096
+
+  # ========== OFFLINE MODE - Ollama Local LLMs ==========
+  # Ollama runs completely offline - no API keys or internet required
+  # Install: https://ollama.ai/download
+  # Start server: ollama serve
+  # Pull models: ollama pull mistral:7b
+
+  # Ollama Small - Mistral 7B (fast, low RAM)
+  ollama_small:
+    enabled: true  # Set to true for offline mode
+    provider: ollama
+    model: mistral  # Alias for mistral:7b
+    base_url: http://localhost:11434
+    config:
+      max_tokens: 2048
+      temperature: 0.7
+      top_p: 0.9
+
+  # Ollama Large - Mixtral 8x7B MoE (~30B active params)
+  ollama_large:
+    enabled: false  # Enable for larger model (requires 24GB+ RAM)
+    provider: ollama
+    model: mixtral  # Alias for mixtral:8x7b
+    base_url: http://localhost:11434
+    config:
+      max_tokens: 4096
+      temperature: 0.7
+      top_p: 0.9
+
+# Routing Configuration
+routing:
+  # Default backend if no rules match
+  # OFFLINE AVATAR MODE: Avatar handles all requests, delegates to online AIs when needed
+  default_backend: ollama_small  # Offline avatar is the primary interface
+
+  # Routing rules (evaluated by priority, highest first)
+  rules:
+    # Offline mode - use local Ollama
+    - tags: [offline, local, private]
+      backends: [ollama_small]
+      strategy: single
+      priority: 110
+      metadata:
+        description: "Completely offline - no internet required"
+
+    # Fast responses - use Pulse (online) or Ollama (offline)
+    - tags: [fast, quick]
+      backends: [pulse]
+      strategy: single
+      priority: 100
+
+    # Coding tasks - use Claude
+    - tags: [code, coding, debug, refactor, architecture]
+      backends: [claude]
+      strategy: single
+      priority: 90
+
+    # Creative writing - use Nova
+    - tags: [creative, write, story, content]
+      backends: [nova]
+      strategy: single
+      priority: 90
+
+    # Multiverse - get perspectives from all AIs
+    - tags: [multiverse, perspectives, compare, all]
+      backends: [claude, nova, pulse, ara]
+      strategy: parallel
+      priority: 100
+      metadata:
+        description: "Get perspectives from all available AIs"
+
+    # Reasoning chain - sequential processing
+    - tags: [chain, sequential, reasoning]
+      backends: [pulse, claude]  # Pulse drafts, Claude refines
+      strategy: sequential
+      priority: 80
+
+    # Competitive - best of multiple AIs
+    - tags: [competitive, best, race]
+      backends: [claude, nova]
+      strategy: competitive
+      priority: 70
+      metadata:
+        description: "Run multiple AIs and return the best response"
+
+# System Configuration
+system:
+  # Logging
+  log_level: INFO
+  log_file: logs/workspace.log
+
+  # Server
+  host: 0.0.0.0
+  port: 8000
+
+  # Security
+  cors_enabled: true
+  cors_origins:
+    - http://localhost:3000
+    - http://localhost:8000
+
+  # Performance
+  max_concurrent_requests: 10
+  request_timeout: 120  # seconds

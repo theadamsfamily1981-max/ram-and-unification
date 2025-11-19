@@ -1,0 +1,40 @@
+# API Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Deep Learning & AI
+torch==2.1.2
+torchvision==0.16.2
+torchaudio==2.1.2
+numpy==1.24.3
+scipy==1.11.4
+
+# Image & Video Processing
+opencv-python==4.9.0.80
+pillow==10.2.0
+imageio==2.33.1
+imageio-ffmpeg==0.4.9
+scikit-image==0.22.0
+
+# Audio Processing
+librosa==0.10.1
+soundfile==0.12.1
+pydub==0.25.1
+
+# Face Detection & Processing
+face-alignment==1.4.1
+retinaface-pytorch==0.0.8
+
+# Utilities
+tqdm==4.66.1
+pyyaml==6.0.1
+requests==2.31.0
+aiofiles==23.2.1
+python-dotenv==1.0.0
+
+# Testing
+pytest==7.4.4
+httpx==0.26.0

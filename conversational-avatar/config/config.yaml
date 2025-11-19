@@ -1,0 +1,165 @@
+# Conversational Avatar AI Configuration
+
+# System Settings
+system:
+  device: "cuda"  # cuda, cpu, or mps (for Mac M1/M2)
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  save_outputs: true
+  max_conversation_turns: 50
+
+  # Global GPU profile (affects ASR, TTS, and Talking Head quality/speed)
+  # "low": Fast, lower quality, works on CPU
+  # "medium": Balanced, good for RTX 5060 (720p video)
+  # "high": Best quality, requires RTX 3090 or better (1080p video)
+  gpu_profile: "medium"
+
+# Audio Input Settings
+audio_input:
+  sample_rate: 16000
+  channels: 1  # mono
+  chunk_size: 1024
+  device_index: null  # null for default mic
+  vad_enabled: true
+  vad_aggressiveness: 2  # 0-3, higher = more aggressive
+  silence_duration: 1.5  # seconds of silence to stop recording
+
+# ASR (Speech-to-Text) Settings
+asr:
+  engine: "whisper"  # whisper, vosk, google
+  model: "small"  # tiny, base, small, medium, large
+  language: "en"  # auto-detect if null
+  beam_size: 5
+  fp16: true  # Use FP16 for faster inference (GPU only)
+
+# Dialogue Manager Settings
+dialogue:
+  engine: "ollama"  # ollama, openai, anthropic, huggingface
+
+  # Ollama settings (local)
+  ollama:
+    model: "llama3.2"  # llama3.2, phi3, mistral, etc.
+    base_url: "http://localhost:11434"
+    temperature: 0.7
+    max_tokens: 150
+    top_p: 0.9
+
+  # OpenAI settings (cloud)
+  openai:
+    model: "gpt-3.5-turbo"
+    api_key_env: "OPENAI_API_KEY"
+    temperature: 0.7
+    max_tokens: 150
+
+  # System prompt
+  system_prompt: |
+    You are a friendly and helpful AI assistant.
+    Keep your responses concise and conversational, as they will be spoken aloud.
+    Aim for responses under 3 sentences unless more detail is specifically requested.
+
+  # Conversation memory
+  memory:
+    max_history: 10  # Keep last N conversation turns
+    summarize_old: false  # Summarize old conversations
+
+# TTS (Text-to-Speech) Settings
+tts:
+  engine: "coqui"  # coqui, pyttsx3, elevenlabs, bark
+
+  # Coqui TTS settings
+  coqui:
+    model: "tts_models/multilingual/multi-dataset/xtts_v2"
+    speaker_wav: null  # Path to voice sample for cloning (null for default)
+    language: "en"
+    speed: 1.0
+
+  # pyttsx3 settings (fast, offline, robotic)
+  pyttsx3:
+    voice_index: 0
+    rate: 175
+    volume: 1.0
+
+  # Output settings
+  output:
+    sample_rate: 22050
+    format: "wav"
+
+# Talking Head / Video Generation Settings (Phase 3)
+talking_head:
+  enabled: true
+  engine: "wav2lip"
+
+  # Avatar image
+  avatar_image: "assets/avatars/default.jpg"
+
+  # Device and quality
+  device: "cuda"  # cuda, cpu, or cuda:0, cuda:1, etc.
+  quality_mode: "standard"  # "standard" (720p, RTX 5060) or "high" (1080p, RTX 3090)
+
+  # Standard profile (720p, optimized for RTX 5060)
+  standard:
+    resolution:
+      width: 1280
+      height: 720
+    fps: 25
+    model: "wav2lip"  # base model
+    face_det_batch_size: 4
+    wav2lip_batch_size: 128
+
+  # High quality profile (1080p, for RTX 3090 or better)
+  high:
+    resolution:
+      width: 1920
+      height: 1080
+    fps: 30
+    model: "wav2lip_gan"  # GAN-enhanced model
+    face_det_batch_size: 8
+    wav2lip_batch_size: 128
+    enhance_face: false  # Enable GFPGAN face enhancement (adds 1-2s latency)
+
+  # Output settings
+  output:
+    format: "mp4"
+    codec: "h264"
+    audio_codec: "aac"
+    audio_bitrate: "192k"
+
+  # Performance optimization
+  cache_preprocessed_face: true
+  use_half_precision: true  # FP16 for faster inference (GPU only)
+
+  # Model paths (relative to project root or absolute)
+  models:
+    wav2lip: "models/wav2lip/wav2lip.pth"
+    wav2lip_gan: "models/wav2lip/wav2lip_gan.pth"
+    face_detection: "models/face_detection/s3fd.pth"
+    gfpgan: "models/gfpgan/GFPGANv1.3.pth"
+
+# Video Player Settings
+player:
+  engine: "opencv"  # opencv, pyqt, web
+  fullscreen: false
+  window_size: [1280, 720]
+  audio_sync: true
+
+# Performance & Optimization
+performance:
+  cache_models: true  # Keep models in memory
+  preload_models: true
+  async_generation: true  # Generate video while speaking
+  max_workers: 4
+
+# Privacy & Security
+privacy:
+  save_conversations: false
+  save_recordings: false
+  save_generated_media: true
+  auto_cleanup: true  # Clean temp files after session
+  cleanup_interval: 3600  # seconds
+
+# Paths
+paths:
+  models: "models"
+  assets: "assets"
+  outputs: "outputs"
+  logs: "logs"
+  temp: "temp"

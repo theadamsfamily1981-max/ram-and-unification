@@ -1,0 +1,42 @@
+# Multi-AI Workspace Dependencies
+# Phase 1 (v0.1) - Core Infrastructure
+
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+python-multipart==0.0.6
+
+# AI Backend APIs
+anthropic==0.18.1          # Claude (Anthropic)
+openai==1.12.0             # Nova - ChatGPT/GPT-4 (OpenAI)
+google-generativeai==0.3.2 # Pulse - Gemini (Google)
+httpx==0.26.0              # For Ollama HTTP calls (offline mode)
+selenium==4.15.2           # Ara - Grok (Selenium automation)
+webdriver-manager==4.0.1   # Auto-manage Chrome/Firefox drivers
+
+# Note: Ollama itself is a separate install (https://ollama.ai/download)
+# No Python package needed - we use httpx to communicate with Ollama server
+
+# Configuration & Data
+pyyaml==6.0.1
+python-dotenv==1.0.0
+
+# Google APIs (for Colab Offload)
+google-auth==2.27.0
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+google-api-python-client==2.116.0
+
+# Async Support
+asyncio==3.4.3
+aiofiles==23.2.1
+
+# Logging & Utilities
+python-json-logger==2.0.7
+
+# Development (Optional)
+# pytest==7.4.4
+# pytest-asyncio==0.23.3
+# black==24.1.1
+# ruff==0.1.14
