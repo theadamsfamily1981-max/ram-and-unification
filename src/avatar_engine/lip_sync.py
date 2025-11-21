@@ -1,12 +1,28 @@
 """Lip sync engine for avatar animation."""
 
-import cv2
-import numpy as np
-import torch
-import torch.nn as nn
+from __future__ import annotations
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from dataclasses import dataclass
+
+# Lazy imports for heavy ML dependencies
+try:
+    import cv2
+    import numpy as np
+    import torch
+    import torch.nn as nn
+    ML_AVAILABLE = True
+except ImportError as e:
+    ML_AVAILABLE = False
+    ML_IMPORT_ERROR = str(e)
+    # Create stub classes for typing
+    class nn:
+        class Module:
+            pass
+        class Sequential:
+            pass
+        class ModuleList:
+            pass
 
 
 @dataclass
@@ -153,6 +169,11 @@ class LipSyncEngine:
         Args:
             config: Lip sync configuration
         """
+        if not ML_AVAILABLE:
+            raise ImportError(
+                f"ML dependencies not installed: {ML_IMPORT_ERROR}. "
+                "Please install with: pip install torch numpy opencv-python"
+            )
         self.config = config or LipSyncConfig()
         self.device = torch.device(self.config.device)
         self.model: Optional[Wav2LipModel] = None
@@ -223,7 +244,6 @@ class LipSyncEngine:
 
         return smoothed
 
-    @torch.no_grad()
     def generate_talking_face(
         self,
         face_image: np.ndarray,
@@ -244,27 +264,28 @@ class LipSyncEngine:
             # If no model loaded, return simple animation
             return self._generate_simple_animation(face_image, num_frames)
 
-        frames = []
-        face_tensor = self.preprocess_image(face_image).to(self.device)
+        with torch.no_grad():
+            frames = []
+            face_tensor = self.preprocess_image(face_image).to(self.device)
 
-        for i in range(num_frames):
-            # Get audio segment for this frame
-            audio_idx = min(i, audio_features.shape[1] - 1)
-            audio_segment = audio_features[:, audio_idx:audio_idx+1]
+            for i in range(num_frames):
+                # Get audio segment for this frame
+                audio_idx = min(i, audio_features.shape[1] - 1)
+                audio_segment = audio_features[:, audio_idx:audio_idx+1]
 
-            # Prepare inputs
-            face_input = face_tensor.unsqueeze(0)
-            face_input = torch.cat([face_input] * 2, dim=1)  # Duplicate for 6 channels
-            audio_input = torch.from_numpy(audio_segment).float().unsqueeze(0).to(self.device)
+                # Prepare inputs
+                face_input = face_tensor.unsqueeze(0)
+                face_input = torch.cat([face_input] * 2, dim=1)  # Duplicate for 6 channels
+                audio_input = torch.from_numpy(audio_segment).float().unsqueeze(0).to(self.device)
 
-            # Generate frame
-            output = self.model(audio_input, face_input)
-            frame = output.squeeze(0).permute(1, 2, 0).cpu().numpy()
-            frame = (frame * 255).astype(np.uint8)
+                # Generate frame
+                output = self.model(audio_input, face_input)
+                frame = output.squeeze(0).permute(1, 2, 0).cpu().numpy()
+                frame = (frame * 255).astype(np.uint8)
 
-            frames.append(frame)
+                frames.append(frame)
 
-        return frames
+            return frames
 
     def _generate_simple_animation(
         self,
