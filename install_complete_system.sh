@@ -351,17 +351,18 @@ while true; do
     echo "  1) 🎤 Voice Avatar (Talk to Ara)"
     echo "  2) 🌐 Avatar REST API (Web interface)"
     echo "  3) 🖥️  T-FAN GNOME Cockpit (HUD)"
-    echo "  4) 🧪 Quick Test (Verify installation)"
-    echo "  5) 📊 Start Everything (All components)"
+    echo "  4) 🎬 Quick Generate (Image + Audio → Video)"
+    echo "  5) 🧪 Quick Test (Verify installation)"
+    echo "  6) 📊 Start Everything (All components)"
     echo ""
-    echo "  6) ⚙️  Settings & Configuration"
-    echo "  7) 📖 View Documentation"
-    echo "  8) 🔄 Update System"
+    echo "  7) ⚙️  Settings & Configuration"
+    echo "  8) 📖 View Documentation"
+    echo "  9) 🔄 Update System"
     echo ""
     echo "  0) Exit"
     echo ""
     echo "========================================================================"
-    read -p "Select option (0-8): " choice
+    read -p "Select option (0-9): " choice
 
     case $choice in
         1)
@@ -379,6 +380,135 @@ while true; do
             tfan-gnome
             ;;
         4)
+            # Quick Generate - Image + Audio → Video
+            clear
+            echo "========================================================================"
+            echo "  🎬 QUICK GENERATE: Create Talking Avatar Video"
+            echo "========================================================================"
+            echo ""
+            echo "This will combine an image and audio file to create a talking avatar."
+            echo ""
+
+            # Ask for image file
+            read -p "Enter path to avatar image (JPG/PNG): " img_path
+
+            # Validate image exists
+            if [ ! -f "$img_path" ]; then
+                echo "❌ Image file not found: $img_path"
+                read -p "Press Enter to continue..."
+                continue
+            fi
+
+            # Ask for audio file
+            read -p "Enter path to audio file (WAV/MP3): " audio_path
+
+            # Validate audio exists
+            if [ ! -f "$audio_path" ]; then
+                echo "❌ Audio file not found: $audio_path"
+                read -p "Press Enter to continue..."
+                continue
+            fi
+
+            echo ""
+            echo "📋 Summary:"
+            echo "  Image: $img_path"
+            echo "  Audio: $audio_path"
+            echo ""
+
+            # Ask for confirmation
+            read -p "Generate video? (y/n): " confirm
+            if [[ ! $confirm =~ ^[Yy]$ ]]; then
+                continue
+            fi
+
+            echo ""
+            echo "🎬 Generating talking avatar video..."
+            echo "This may take a few minutes..."
+            echo ""
+
+            # Copy files to system
+            cd "$BASE_DIR/ram-and-unification"
+
+            # Copy image to assets
+            img_filename="avatar_$(date +%s).jpg"
+            cp "$img_path" "assets/avatars/$img_filename"
+            echo "✅ Image saved to: assets/avatars/$img_filename"
+
+            # Copy audio to uploads
+            audio_ext="${audio_path##*.}"
+            audio_filename="audio_$(date +%s).$audio_ext"
+            cp "$audio_path" "uploads/$audio_filename"
+            echo "✅ Audio saved to: uploads/$audio_filename"
+
+            # Generate video using Python
+            output_video="outputs/talking_avatar_$(date +%s).mp4"
+
+            python3 << EOFPY
+import sys
+from pathlib import Path
+from src.avatar_engine import AvatarGenerator
+
+print("\n🎨 Initializing avatar generator...")
+generator = AvatarGenerator(device='cpu')
+
+print("🎬 Generating talking avatar...")
+result = generator.generate(
+    image_input=Path("assets/avatars/$img_filename"),
+    audio_input=Path("uploads/$audio_filename"),
+    output_path=Path("$output_video")
+)
+
+if result.success:
+    print(f"\n✅ SUCCESS! Video generated!")
+    print(f"📍 Location: $output_video")
+    print(f"⏱️  Duration: {result.duration:.2f} seconds")
+    print(f"🎞️  Frames: {result.frames_generated}")
+else:
+    print(f"\n❌ ERROR: {result.error_message}")
+    sys.exit(1)
+EOFPY
+
+            if [ $? -eq 0 ]; then
+                echo ""
+                echo "========================================================================"
+                echo "  ✨ VIDEO GENERATED SUCCESSFULLY!"
+                echo "========================================================================"
+                echo ""
+                echo "📍 Your video is ready at:"
+                echo "   $(realpath "$output_video")"
+                echo ""
+
+                # Ask if they want to play it
+                read -p "Play video now? (y/n): " play_confirm
+                if [[ $play_confirm =~ ^[Yy]$ ]]; then
+                    if command -v vlc &> /dev/null; then
+                        vlc "$output_video" &
+                    elif command -v mpv &> /dev/null; then
+                        mpv "$output_video"
+                    elif command -v xdg-open &> /dev/null; then
+                        xdg-open "$output_video"
+                    else
+                        echo "No video player found. Please open the file manually."
+                    fi
+                fi
+
+                # Ask if they want to set this as default avatar
+                echo ""
+                read -p "Set this image as default avatar for voice mode? (y/n): " default_confirm
+                if [[ $default_confirm =~ ^[Yy]$ ]]; then
+                    cp "assets/avatars/$img_filename" "assets/avatars/default.jpg"
+                    cp "assets/avatars/$img_filename" "conversational-avatar/assets/avatars/default.jpg"
+                    echo "✅ Set as default avatar!"
+                fi
+            else
+                echo ""
+                echo "❌ Video generation failed. Check the error message above."
+            fi
+
+            echo ""
+            read -p "Press Enter to continue..."
+            ;;
+        5)
             echo "Running quick test..."
             cd "$BASE_DIR/ram-and-unification"
             python3 << 'EOF'
@@ -390,7 +520,7 @@ print("\n🎉 All systems operational!")
 EOF
             read -p "Press Enter to continue..."
             ;;
-        5)
+        6)
             echo "Starting all components..."
             gnome-terminal -- bash -c "cd $BASE_DIR/ram-and-unification && python3 -m src.main; exec bash" &
             sleep 2
@@ -398,13 +528,13 @@ EOF
             echo "All components started!"
             read -p "Press Enter to continue..."
             ;;
-        6)
+        7)
             nano "$BASE_DIR/ram-and-unification/.env"
             ;;
-        7)
+        8)
             xdg-open "https://github.com/theadamsfamily1981-max/ram-and-unification/blob/main/README.md"
             ;;
-        8)
+        9)
             cd "$BASE_DIR"
             git -C ram-and-unification pull
             git -C Quanta-meis-nib-cis pull
