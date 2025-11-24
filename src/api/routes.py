@@ -26,15 +26,21 @@ def get_generator() -> AvatarGenerator:
     """Get or create avatar generator instance."""
     global avatar_generator
     if avatar_generator is None:
-        avatar_generator = AvatarGenerator(
-            device=settings.device,
-            output_fps=settings.output_fps,
-            output_resolution=settings.output_resolution
-        )
-        # Load models if available
-        model_path = settings.model_cache_dir / "wav2lip_model.pth"
-        if model_path.exists():
-            avatar_generator.load_models(model_path)
+        try:
+            avatar_generator = AvatarGenerator(
+                device=settings.device,
+                output_fps=settings.output_fps,
+                output_resolution=settings.output_resolution
+            )
+            # Load models if available
+            model_path = settings.model_cache_dir / "wav2lip_model.pth"
+            if model_path.exists():
+                avatar_generator.load_models(model_path)
+        except ImportError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Avatar generation unavailable: {str(e)}"
+            )
     return avatar_generator
 
 

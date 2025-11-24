@@ -1,11 +1,22 @@
 """Main avatar generator combining all components."""
 
-import cv2
-import numpy as np
+from __future__ import annotations
 from pathlib import Path
-from typing import Optional, Union, List
+from typing import Optional, Union, List, TYPE_CHECKING
 from dataclasses import dataclass
 import uuid
+
+# Lazy imports for heavy ML dependencies
+try:
+    import cv2
+    import numpy as np
+    ML_AVAILABLE = True
+except ImportError as e:
+    ML_AVAILABLE = False
+    ML_IMPORT_ERROR = str(e)
+    # Create stub for numpy
+    class np:
+        ndarray = None
 
 from .lip_sync import LipSyncEngine, LipSyncConfig
 from ..utils.face_detection import FaceDetector

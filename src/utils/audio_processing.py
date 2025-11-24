@@ -1,10 +1,20 @@
 """Audio processing utilities."""
 
-import numpy as np
-import librosa
-import soundfile as sf
+from __future__ import annotations
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, TYPE_CHECKING
+
+# Lazy imports for heavy ML dependencies
+try:
+    import numpy as np
+    import librosa
+    import soundfile as sf
+    AUDIO_AVAILABLE = True
+except ImportError as e:
+    AUDIO_AVAILABLE = False
+    AUDIO_IMPORT_ERROR = str(e)
+    class np:
+        ndarray = None
 
 
 class AudioProcessor:
@@ -16,6 +26,11 @@ class AudioProcessor:
         Args:
             sample_rate: Target sample rate
         """
+        if not AUDIO_AVAILABLE:
+            raise ImportError(
+                f"Audio dependencies not installed: {AUDIO_IMPORT_ERROR}. "
+                "Please install with: pip install numpy librosa soundfile"
+            )
         self.sample_rate = sample_rate
 
     def load_audio(

@@ -1,9 +1,19 @@
 """Face detection utilities."""
 
-import cv2
-import numpy as np
-from typing import Tuple, List, Optional
-import torch
+from __future__ import annotations
+from typing import Tuple, List, Optional, TYPE_CHECKING
+
+# Lazy imports for heavy ML dependencies
+try:
+    import cv2
+    import numpy as np
+    import torch
+    ML_AVAILABLE = True
+except ImportError as e:
+    ML_AVAILABLE = False
+    ML_IMPORT_ERROR = str(e)
+    class np:
+        ndarray = None
 
 
 class FaceDetector:
@@ -15,6 +25,11 @@ class FaceDetector:
         Args:
             device: Device to use (cuda or cpu)
         """
+        if not ML_AVAILABLE:
+            raise ImportError(
+                f"ML dependencies not installed: {ML_IMPORT_ERROR}. "
+                "Please install with: pip install opencv-python numpy torch"
+            )
         self.device = device
         self.face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
