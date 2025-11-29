@@ -16,6 +16,8 @@ import os
 from pathlib import Path
 from typing import Optional, Dict, Any, AsyncIterator
 import sys
+from concurrent.futures import ThreadPoolExecutor
+import functools
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -112,6 +114,9 @@ class AraAvatarBackend(AIBackend):
 
         # Avatar generator (lazy loaded)
         self.generator = None
+
+        # Thread pool for blocking operations (avatar generation, TTS, etc.)
+        self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ara_avatar")
 
         # Current mode and avatar state
         self.current_mode = "default"
@@ -391,17 +396,33 @@ class AraAvatarBackend(AIBackend):
                 timestamp = int(time.time())
                 video_path = self.avatar_output_dir / f"ara_response_{timestamp}.mp4"
 
-                result = self.generator.generate(
-                    image_input=Path(avatar_image),
-                    audio_input=Path(audio_path),
-                    output_path=video_path
-                )
+                # Run blocking avatar generation in thread pool to avoid blocking event loop
+                loop = asyncio.get_event_loop()
+                try:
+                    result = await asyncio.wait_for(
+                        loop.run_in_executor(
+                            self._executor,
+                            functools.partial(
+                                self.generator.generate,
+                                image_input=Path(avatar_image),
+                                audio_input=Path(audio_path),
+                                output_path=video_path
+                            )
+                        ),
+                        timeout=60.0  # 60 second timeout for avatar generation
+                    )
 
-                if result and result.get("success"):
-                    video_path = str(video_path)
-                else:
+                    if result and result.get("success"):
+                        video_path = str(video_path)
+                    else:
+                        video_path = None
+                        logger.error(f"Avatar generation failed: {result}")
+                except asyncio.TimeoutError:
                     video_path = None
-                    logger.error(f"Avatar generation failed: {result}")
+                    logger.error("Avatar generation timed out after 60 seconds")
+                except Exception as e:
+                    video_path = None
+                    logger.error(f"Avatar generation error: {e}")
 
             return {
                 "text": text,
@@ -429,18 +450,31 @@ class AraAvatarBackend(AIBackend):
             timestamp = int(time.time())
             audio_path = self.avatar_output_dir / f"ara_tts_{timestamp}.wav"
 
-            # Use TTS with Ara voice settings
-            result = text_to_speech(
-                text=text,
-                output_path=str(audio_path),
-                voice="jenny",  # Or custom Ara voice
-                speed=0.95,  # Slightly slower (from persona spec)
-                pitch=-0.5   # Lower pitch (soft contralto)
-            )
+            # Run blocking TTS generation in thread pool to avoid blocking event loop
+            loop = asyncio.get_event_loop()
 
-            if result and Path(audio_path).exists():
-                return str(audio_path)
-            else:
+            def _tts_sync():
+                """Synchronous TTS wrapper for thread pool."""
+                return text_to_speech(
+                    text=text,
+                    output_path=str(audio_path),
+                    voice="jenny",  # Or custom Ara voice
+                    speed=0.95,  # Slightly slower (from persona spec)
+                    pitch=-0.5   # Lower pitch (soft contralto)
+                )
+
+            try:
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(self._executor, _tts_sync),
+                    timeout=30.0  # 30 second timeout for TTS
+                )
+
+                if result and Path(audio_path).exists():
+                    return str(audio_path)
+                else:
+                    return None
+            except asyncio.TimeoutError:
+                logger.error("TTS generation timed out after 30 seconds")
                 return None
 
         except Exception as e:
@@ -511,3 +545,13 @@ class AraAvatarBackend(AIBackend):
         except Exception as e:
             logger.error(f"Ara health check failed: {e}")
             return False
+
+    def cleanup(self):
+        """Cleanup resources (thread pool)."""
+        if hasattr(self, '_executor'):
+            self._executor.shutdown(wait=False)
+            logger.info("Ara Avatar Backend thread pool shut down")
+
+    def __del__(self):
+        """Destructor to ensure cleanup."""
+        self.cleanup()
