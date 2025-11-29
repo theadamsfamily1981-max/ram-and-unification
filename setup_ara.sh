@@ -52,63 +52,172 @@ if [ "$EUID" -eq 0 ]; then
     exit 1
 fi
 
-# Check Python 3
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ Python 3 not found. Please install Python 3.10+${NC}"
-    exit 1
+# Detect OS
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+else
+    OS="unknown"
 fi
 
-echo -e "${GREEN}✓ Python 3 found${NC}"
+echo -e "${CYAN}Detected OS: ${YELLOW}$OS${NC}"
+echo ""
 
-# Check Ollama
-echo -e "\n${CYAN}Checking Ollama...${NC}"
+##############################################################################
+# INSTALL OLLAMA
+##############################################################################
+
+echo -e "${CYAN}Checking Ollama...${NC}"
 if ! command -v ollama &> /dev/null; then
     echo -e "${YELLOW}⚠ Ollama not installed${NC}"
-    echo -e "${CYAN}Install from: https://ollama.ai/download${NC}"
+    echo -e "${CYAN}Ollama is required for Ara to work offline${NC}"
     echo ""
-    read -p "Continue without Ollama? (y/n): " choice
-    if [ "$choice" != "y" ]; then
+    read -p "Install Ollama automatically? (y/n): " install_ollama
+
+    if [ "$install_ollama" = "y" ]; then
+        echo -e "${CYAN}Installing Ollama...${NC}"
+        curl -fsSL https://ollama.ai/install.sh | sh
+
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✓ Ollama installed successfully${NC}"
+        else
+            echo -e "${RED}❌ Ollama installation failed${NC}"
+            echo -e "${YELLOW}Install manually from: https://ollama.ai/download${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}⚠ Skipping Ollama installation${NC}"
+        echo -e "${YELLOW}Ara will not work without Ollama${NC}"
+        echo -e "${YELLOW}Install from: https://ollama.ai/download${NC}"
         exit 1
     fi
 else
     echo -e "${GREEN}✓ Ollama installed${NC}"
+fi
 
-    # Check if Ollama is running
-    if ! curl -s http://localhost:11434/api/tags &> /dev/null; then
-        echo -e "${YELLOW}⚠ Ollama server not running${NC}"
-        echo -e "${CYAN}Starting Ollama server in background...${NC}"
-        ollama serve &
+# Start Ollama service
+echo -e "${CYAN}Starting Ollama service...${NC}"
+if ! pgrep -x "ollama" > /dev/null; then
+    if systemctl is-enabled ollama &> /dev/null; then
+        sudo systemctl start ollama
+    else
+        nohup ollama serve > /dev/null 2>&1 &
         sleep 3
     fi
-
-    # Check if Mistral is installed
-    if ! ollama list | grep -q mistral; then
-        echo -e "${YELLOW}⚠ Mistral model not found${NC}"
-        echo -e "${CYAN}Pulling Mistral model (this may take a few minutes)...${NC}"
-        ollama pull mistral
-    fi
-
-    echo -e "${GREEN}✓ Ollama ready with Mistral model${NC}"
+    echo -e "${GREEN}✓ Ollama started${NC}"
+else
+    echo -e "${GREEN}✓ Ollama already running${NC}"
 fi
 
-# Install system dependencies (optional)
-echo -e "\n${CYAN}Installing system dependencies (requires sudo)...${NC}"
-read -p "Install system packages? (y/n): " install_sys
+# Pull Mistral base model
+echo -e "${CYAN}Checking for Mistral base model...${NC}"
+if ollama list | grep -q "mistral"; then
+    echo -e "${GREEN}✓ Mistral model already downloaded${NC}"
+else
+    echo -e "${CYAN}Downloading Mistral 7B model (this may take a few minutes)...${NC}"
+    ollama pull mistral
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ Mistral model downloaded${NC}"
+    else
+        echo -e "${YELLOW}⚠ Could not download Mistral model${NC}"
+    fi
+fi
+
+echo ""
+
+##############################################################################
+# INSTALL SYSTEM DEPENDENCIES
+##############################################################################
+
+echo -e "${CYAN}System dependencies are needed for audio/video processing${NC}"
+echo -e "${YELLOW}Packages: FFmpeg, PortAudio, espeak-ng, video codecs${NC}"
+echo ""
+read -p "Install system dependencies? (y/n): " install_sys
 
 if [ "$install_sys" = "y" ]; then
-    sudo apt update
-    sudo apt install -y \
-        ffmpeg \
-        portaudio19-dev \
-        espeak-ng \
-        libx264-dev \
-        libx265-dev \
-        libgl1-mesa-glx \
-        libglib2.0-0 \
-        python3-pyaudio
+    echo -e "${CYAN}Installing system packages...${NC}"
 
-    echo -e "${GREEN}✓ System dependencies installed${NC}"
+    if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+        sudo apt update
+        sudo apt install -y \
+            python3 \
+            python3-pip \
+            python3-venv \
+            python3-dev \
+            ffmpeg \
+            portaudio19-dev \
+            espeak-ng \
+            libx264-dev \
+            libx265-dev \
+            libgl1-mesa-glx \
+            libglib2.0-0 \
+            python3-pyaudio \
+            build-essential \
+            git \
+            curl \
+            wget
+
+    elif [ "$OS" = "fedora" ] || [ "$OS" = "rhel" ] || [ "$OS" = "centos" ]; then
+        sudo dnf install -y \
+            python3 \
+            python3-pip \
+            python3-devel \
+            ffmpeg \
+            portaudio-devel \
+            espeak-ng \
+            x264-devel \
+            x265-devel \
+            mesa-libGL \
+            glib2 \
+            gcc \
+            gcc-c++ \
+            git \
+            curl \
+            wget
+
+    elif [ "$OS" = "arch" ] || [ "$OS" = "manjaro" ]; then
+        sudo pacman -S --noconfirm \
+            python \
+            python-pip \
+            ffmpeg \
+            portaudio \
+            espeak-ng \
+            x264 \
+            x265 \
+            mesa \
+            glib2 \
+            base-devel \
+            git \
+            curl \
+            wget
+
+    else
+        echo -e "${YELLOW}⚠ Unsupported OS: $OS${NC}"
+        echo -e "${YELLOW}Please install dependencies manually${NC}"
+    fi
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ System dependencies installed${NC}"
+    else
+        echo -e "${YELLOW}⚠ Some packages may have failed to install${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠ Skipping system dependencies${NC}"
+    echo -e "${YELLOW}Some features may not work without them${NC}"
 fi
+
+echo ""
+
+# Check Python
+if ! command -v python3 &> /dev/null; then
+    echo -e "${RED}❌ Python 3 not found${NC}"
+    echo -e "${YELLOW}Please install Python 3.10+ and try again${NC}"
+    exit 1
+fi
+
+PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
+echo -e "${GREEN}✓ Python ${PYTHON_VERSION} found${NC}"
+echo ""
 
 # Create virtual environment
 echo -e "\n${CYAN}Setting up Python virtual environment...${NC}"
