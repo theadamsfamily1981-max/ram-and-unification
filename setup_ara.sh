@@ -167,8 +167,36 @@ mkdir -p assets/avatars
 mkdir -p uploads
 mkdir -p temp
 mkdir -p models
+mkdir -p training
 
 echo -e "${GREEN}✓ Output directories created${NC}"
+
+# Build custom Ara model
+echo -e "\n${CYAN}Building custom Ara model with personality...${NC}"
+if command -v ollama &> /dev/null; then
+    # Generate dataset if not exists
+    if [ ! -f "training/Modelfile.ara" ]; then
+        echo -e "${CYAN}Generating Ara training dataset...${NC}"
+        python3 training/generate_ara_dataset.py
+    fi
+
+    # Check if ara model already exists
+    if ollama list | grep -q "^ara "; then
+        echo -e "${GREEN}✓ Custom 'ara' model already exists${NC}"
+    else
+        echo -e "${CYAN}Creating custom 'ara' model (this may take a moment)...${NC}"
+        if ollama create ara -f training/Modelfile.ara 2>&1; then
+            echo -e "${GREEN}✓ Custom 'ara' model created successfully!${NC}"
+            echo -e "${CYAN}Ara now has her personality baked into the model${NC}"
+        else
+            echo -e "${YELLOW}⚠ Could not create custom model, will fall back to base Mistral${NC}"
+            echo -e "${YELLOW}You can build it later with: ./training/build_ara_model.sh${NC}"
+        fi
+    fi
+else
+    echo -e "${YELLOW}⚠ Ollama not available, skipping custom model creation${NC}"
+    echo -e "${YELLOW}Install Ollama and run: ./training/build_ara_model.sh${NC}"
+fi
 
 # Check for avatar images
 echo -e "\n${CYAN}Checking avatar images...${NC}"

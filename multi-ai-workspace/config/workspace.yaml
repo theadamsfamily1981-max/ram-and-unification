@@ -50,11 +50,22 @@ backends:
   # Ollama runs completely offline - no API keys or internet required
   # Install: https://ollama.ai/download
   # Start server: ollama serve
-  # Pull models: ollama pull mistral:7b
 
-  # Ollama Small - Mistral 7B (fast, low RAM)
+  # Ara - Custom model with Ara personality (RECOMMENDED)
+  ara:
+    enabled: true  # Primary offline avatar with Ara persona
+    provider: ollama
+    model: ara  # Custom Ara model built from training/build_ara_model.sh
+    base_url: http://localhost:11434
+    config:
+      max_tokens: 2048
+      temperature: 0.8  # Ara's warm, natural tone
+      top_p: 0.9
+      description: "Ara - Your AI co-pilot with warm, competent personality"
+
+  # Ollama Small - Mistral 7B (fallback if ara model not built)
   ollama_small:
-    enabled: true  # Set to true for offline mode
+    enabled: true  # Fallback for generic offline use
     provider: ollama
     model: mistral  # Alias for mistral:7b
     base_url: http://localhost:11434
@@ -77,18 +88,18 @@ backends:
 # Routing Configuration
 routing:
   # Default backend if no rules match
-  # OFFLINE AVATAR MODE: Avatar handles all requests, delegates to online AIs when needed
-  default_backend: ollama_small  # Offline avatar is the primary interface
+  # OFFLINE AVATAR MODE: Ara handles all requests, delegates to online AIs when needed
+  default_backend: ara  # Ara with personality is the primary interface
 
   # Routing rules (evaluated by priority, highest first)
   rules:
-    # Offline mode - use local Ollama
-    - tags: [offline, local, private]
-      backends: [ollama_small]
+    # Offline mode - use Ara
+    - tags: [offline, local, private, ara]
+      backends: [ara]
       strategy: single
       priority: 110
       metadata:
-        description: "Completely offline - no internet required"
+        description: "Completely offline with Ara personality - no internet required"
 
     # Fast responses - use Pulse (online) or Ollama (offline)
     - tags: [fast, quick]
