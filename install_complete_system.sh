@@ -328,6 +328,27 @@ if [ -d "$TFAN_DIR" ] && [ "$SKIP_TFAN" != true ]; then
 fi
 
 ##############################################################################
+# Step 9b: Fix WebKit in Installed Files
+##############################################################################
+if [ "$SKIP_TFAN" != true ]; then
+    echo -e "${BLUE}${ARROW} Step 9b: Fixing WebKit in installed files...${NC}"
+
+    # Fix installed tfan_gnome.py in common installation locations
+    for install_dir in "$REAL_HOME/.local/share/tfan" "/usr/local/share/tfan" "/usr/share/tfan"; do
+        if [ -d "$install_dir" ]; then
+            find "$install_dir" -name "*.py" -type f -exec grep -l "gi.require_version('WebKit', '6.0')" {} \; 2>/dev/null | while read file; do
+                echo "Fixing installed file: $file"
+                cp "$file" "$file.bak" 2>/dev/null || true
+                sed -i "s/gi.require_version('WebKit', '6.0')/gi.require_version('WebKit2', '4.1')/g" "$file"
+                sed -i "s/from gi.repository import.*WebKit$/from gi.repository import WebKit2 as WebKit/g" "$file"
+                echo -e "${GREEN}${CHECK} Fixed WebKit in: $(basename $file)${NC}"
+            done
+        fi
+    done
+    echo ""
+fi
+
+##############################################################################
 # Step 10: Create Unified Launcher Scripts
 ##############################################################################
 echo -e "${BLUE}${ARROW} Step 10: Creating launcher scripts...${NC}"
@@ -339,6 +360,27 @@ cat > "$BASE_DIR/tfan-ara-launcher.sh" << 'EOFMENU'
 # T-FAN + Ara Unified Launcher
 
 BASE_DIR="$(dirname "$(readlink -f "$0")")"
+
+# Function to find available terminal emulator
+find_terminal() {
+    if command -v gnome-terminal &> /dev/null; then
+        echo "gnome-terminal --"
+    elif command -v konsole &> /dev/null; then
+        echo "konsole -e"
+    elif command -v xfce4-terminal &> /dev/null; then
+        echo "xfce4-terminal -e"
+    elif command -v mate-terminal &> /dev/null; then
+        echo "mate-terminal -e"
+    elif command -v xterm &> /dev/null; then
+        echo "xterm -e"
+    elif command -v x-terminal-emulator &> /dev/null; then
+        echo "x-terminal-emulator -e"
+    else
+        echo ""
+    fi
+}
+
+TERMINAL_CMD=$(find_terminal)
 
 while true; do
     clear
@@ -522,9 +564,18 @@ EOF
             ;;
         6)
             echo "Starting all components..."
-            gnome-terminal -- bash -c "cd $BASE_DIR/ram-and-unification && python3 -m src.main; exec bash" &
+            if [ -n "$TERMINAL_CMD" ]; then
+                $TERMINAL_CMD bash -c "cd $BASE_DIR/ram-and-unification && python3 -m src.main; exec bash" &
+            else
+                echo "No terminal emulator found. Starting API in background..."
+                cd "$BASE_DIR/ram-and-unification" && python3 -m src.main &
+            fi
             sleep 2
-            tfan-gnome &
+            if command -v tfan-gnome &> /dev/null; then
+                tfan-gnome &
+            else
+                echo "⚠️  T-FAN not installed or not in PATH"
+            fi
             echo "All components started!"
             read -p "Press Enter to continue..."
             ;;
