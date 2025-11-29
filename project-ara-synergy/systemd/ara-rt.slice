@@ -1,0 +1,10 @@
+[Unit]
+Description=Ara Real-Time Slice
+Before=slices.target
+
+[Slice]
+CPUAccounting=true
+MemoryAccounting=true
+IOAccounting=true
+AllowedCPUs=8-15
+ManagedOOMSwap=kill

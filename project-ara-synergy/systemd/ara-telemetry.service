@@ -1,0 +1,14 @@
+[Unit]
+Description=Ara Telemetry (ATF D-Bus Producer)
+After=ara-orchestrator.service
+
+[Service]
+Slice=ara-rt.slice
+ExecStart=/usr/bin/python3 /opt/ara/project-ara-synergy/python/ara_telemetry_daemon.py
+WorkingDirectory=/opt/ara/project-ara-synergy
+
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

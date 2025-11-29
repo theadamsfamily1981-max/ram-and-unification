@@ -1,0 +1,29 @@
+/* Ara Status Extension Stylesheet */
+
+.ara-status-icon-idle {
+    color: rgba(150, 150, 255, 0.6);
+}
+
+.ara-status-icon-flight {
+    color: rgba(0, 200, 255, 0.9);
+    text-shadow: 0 0 6px rgba(0, 200, 255, 0.9);
+}
+
+.ara-status-icon-battle {
+    color: rgba(255, 180, 0, 0.95);
+    text-shadow: 0 0 10px rgba(255, 120, 0, 1.0);
+}
+
+.ara-status-icon-critical {
+    color: rgba(255, 40, 40, 1.0);
+    animation: ara-critical-pulse 0.8s infinite alternate;
+}
+
+@keyframes ara-critical-pulse {
+    from {
+        text-shadow: 0 0 4px rgba(255, 0, 0, 0.8);
+    }
+    to {
+        text-shadow: 0 0 14px rgba(255, 0, 0, 1.0);
+    }
+}

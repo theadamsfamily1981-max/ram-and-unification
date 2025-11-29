@@ -1,0 +1,23 @@
+[Unit]
+Description=Ara HAA Orchestrator (FPGA+GPU)
+After=multi-user.target
+Wants=ara-rt.slice
+
+[Service]
+Slice=ara-rt.slice
+ExecStart=/usr/bin/chrt -f 80 /usr/bin/python3 /opt/ara/project-ara-synergy/python/orchestrator.py
+WorkingDirectory=/opt/ara/project-ara-synergy
+
+CPUAffinity=8 9 10 11 12 13 14 15
+Nice=-15
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+
+LimitRTPRIO=95
+LimitMEMLOCK=infinity
+
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

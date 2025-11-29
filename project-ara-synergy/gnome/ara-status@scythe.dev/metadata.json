@@ -1,0 +1,7 @@
+{
+  "uuid": "ara-status@scythe.dev",
+  "name": "Ara Status Indicator",
+  "description": "Hyper-reactive Ara HAA status indicator and mode switcher",
+  "shell-version": ["45", "46"],
+  "version": 1
+}
