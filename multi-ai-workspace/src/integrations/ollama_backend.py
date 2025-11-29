@@ -28,6 +28,14 @@ class OllamaBackend(AIBackend):
 
     # Model configurations
     MODELS = {
+        "ara": {
+            "id": "ara",
+            "display_name": "Ara (Custom)",
+            "params": "7B (Mistral-based)",
+            "ram_required": "4-8GB",
+            "description": "Custom Ara model with personality - your AI co-pilot",
+            "context_length": 8192
+        },
         "mistral": {
             "id": "mistral:7b",
             "display_name": "Mistral 7B",
