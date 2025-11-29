@@ -1,0 +1,56 @@
+# configs/snn/fabric_toy.yaml
+#
+# Example SNN fabric configuration: 3-layer feedforward network
+# matching Ara-SYNERGY FPGA architecture (N=4096, r=32, k=64)
+#
+# This config creates:
+#   - Input population (4096 neurons, pass-through)
+#   - Hidden population (4096 LIF neurons)
+#   - Output population (4096 readout neurons)
+#   - Low-rank masked projections (k=64, r=32)
+#
+# CI Gates (should pass bench_snn.py audits):
+#   - param_reduction_pct ≥ 97.0%
+#   - avg_degree ≤ 0.02 * N (k=64 < 0.02*4096=81.92)
+#   - rank ≤ 0.02 * N (r=32 < 0.02*4096=81.92)
+#   - sparsity ≥ 0.98
+
+populations:
+  - name: input
+    N: 4096
+    kind: input
+    # Input populations just pass through spikes from encoders
+
+  - name: hidden
+    N: 4096
+    kind: lif
+    v_th: 1.0            # Spike threshold
+    alpha: 0.95          # Leak factor (membrane time constant)
+    surrogate_scale: 10.0  # Gradient scale for training
+    reset_mode: zero     # Hard reset after spike
+
+  - name: output
+    N: 4096
+    kind: readout
+    beta: 0.9            # Temporal smoothing factor
+
+projections:
+  - name: input_to_hidden
+    pre: input
+    post: hidden
+    k: 64                # Sparse connections per neuron
+    r: 32                # Low-rank dimension
+    kind: lowrank
+    plasticity: true     # Weights are learnable
+
+  - name: hidden_to_output
+    pre: hidden
+    post: output
+    k: 64
+    r: 32
+    kind: lowrank
+    plasticity: true
+
+# Optional top-level parameters
+dtype: float32
+validate: true
