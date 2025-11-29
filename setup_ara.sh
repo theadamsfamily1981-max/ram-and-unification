@@ -21,6 +21,30 @@ echo "║                 🤖  ARA QUICK SETUP  🤖                       ║"
 echo "║                                                               ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
+echo ""
+echo -e "${YELLOW}Choose installation type:${NC}"
+echo ""
+echo "  1) Ara Only        - AI co-pilot with voice control"
+echo "  2) Ara + T-FAN     - Complete system with cockpit HUD"
+echo ""
+read -p "Select (1 or 2): " install_choice
+
+if [ "$install_choice" = "2" ]; then
+    echo -e "\n${CYAN}Launching complete system installer (Ara + T-FAN)...${NC}"
+    echo -e "${YELLOW}This will install both the avatar system and T-FAN cockpit${NC}"
+    echo ""
+    read -p "Continue? (y/n): " confirm
+    if [ "$confirm" = "y" ]; then
+        exec ./install_complete_system.sh
+    else
+        echo "Installation cancelled"
+        exit 0
+    fi
+fi
+
+echo -e "\n${CYAN}Installing Ara only (lightweight)${NC}"
+echo -e "${YELLOW}Note: You can install T-FAN later with ./install_complete_system.sh${NC}"
+echo ""
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then

@@ -69,7 +69,45 @@ Ara has a carefully designed personality:
 
 ## Installation
 
-### Prerequisites
+### Choose Your Installation Path
+
+**Option 1: Ara Only (Lightweight)**
+- Just the AI co-pilot with voice control
+- No cockpit HUD or metrics visualization
+- Faster installation, lower requirements
+
+**Option 2: Ara + T-FAN (Complete System)**
+- Full AI co-pilot + spaceship-style cockpit HUD
+- Metrics visualization (GPU, CPU, network, storage)
+- Topology visualization
+- All voice macros work with cockpit integration
+
+### Quick Installation
+
+**Automated Setup (Recommended):**
+
+```bash
+# Run the setup script
+./setup_ara.sh
+
+# Choose option when prompted:
+#   1) Ara Only        - AI co-pilot with voice control
+#   2) Ara + T-FAN     - Complete system with cockpit HUD
+```
+
+The installer will:
+- Check and install Ollama (if needed)
+- Install Python dependencies
+- Optionally install ML dependencies (avatar generation)
+- Optionally install voice recognition
+- Set up environment configuration
+- Create output directories
+
+### Manual Installation
+
+If you prefer manual setup:
+
+#### Prerequisites
 
 1. **Python 3.10+**
 2. **Ollama** (for offline AI)
@@ -97,7 +135,7 @@ Ara has a carefully designed personality:
        libglib2.0-0
    ```
 
-### Quick Start
+#### Manual Steps
 
 ```bash
 # 1. Clone repository (if not already done)
@@ -121,6 +159,16 @@ cp .env.ara.example .env
 # 6. Launch Ara
 ./start_ara.sh
 ```
+
+### Installing T-FAN Cockpit Later
+
+If you chose "Ara Only" and want to add T-FAN later:
+
+```bash
+./install_complete_system.sh
+```
+
+This will add the T-FAN cockpit to your existing Ara installation.
 
 ## Usage
 
