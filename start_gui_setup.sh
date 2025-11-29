@@ -14,18 +14,14 @@ echo ""
 echo "The web-based setup wizard is starting..."
 echo ""
 echo "Once the server starts, open your browser to:"
-echo "  👉 http://localhost:8000/setup"
-echo ""
-echo "Or use the chat interface at:"
-echo "  👉 http://localhost:8000/"
+echo "  👉 http://localhost:8000"
 echo ""
 echo "========================================================================"
 echo ""
 
-# Change to multi-ai-workspace directory
-cd "$(dirname "$0")/multi-ai-workspace"
+# Change to project directory
+cd "$(dirname "$0")"
 
-# Start the server
-echo "Starting web server..."
-python3 -m uvicorn src.ui.app:app --host 0.0.0.0 --port 8000 --reload
+# Start the standalone setup server
+python3 setup_server.py
 
