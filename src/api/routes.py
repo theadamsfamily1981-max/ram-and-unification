@@ -7,6 +7,8 @@ from typing import Dict
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 import aiofiles
+from concurrent.futures import ThreadPoolExecutor
+import functools
 
 from .models import GenerateRequest, GenerateResponse, HealthResponse, StatusResponse
 from ..avatar_engine import AvatarGenerator
@@ -17,6 +19,9 @@ router = APIRouter()
 
 # Global avatar generator instance
 avatar_generator: AvatarGenerator | None = None
+
+# Thread pool for blocking avatar generation operations
+_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="avatar_gen")
 
 # Job tracking
 jobs: Dict[str, Dict] = {}
@@ -142,13 +147,22 @@ async def process_avatar_generation(job_id: str, request: GenerateRequest):
 
         jobs[job_id]["progress"] = 30
 
-        # Generate avatar
+        # Generate avatar in thread pool to avoid blocking event loop
         output_path = settings.output_dir / f"{job_id}.mp4"
-        result = generator.generate(
-            image_input=image_path,
-            audio_input=audio_path,
-            output_path=output_path,
-            temp_dir=settings.temp_dir
+        loop = asyncio.get_event_loop()
+
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                _executor,
+                functools.partial(
+                    generator.generate,
+                    image_input=image_path,
+                    audio_input=audio_path,
+                    output_path=output_path,
+                    temp_dir=settings.temp_dir
+                )
+            ),
+            timeout=120.0  # 2 minute timeout for avatar generation
         )
 
         jobs[job_id]["progress"] = 90
@@ -208,16 +222,30 @@ async def generate_avatar(
     if not audio_path.exists():
         raise HTTPException(status_code=404, detail=f"Audio file not found: {request.audio_filename}")
 
-    # Generate avatar
+    # Generate avatar in thread pool to avoid blocking event loop
     job_id = uuid.uuid4().hex
     output_path = settings.output_dir / f"{job_id}.mp4"
 
-    result = generator.generate(
-        image_input=image_path,
-        audio_input=audio_path,
-        output_path=output_path,
-        temp_dir=settings.temp_dir
-    )
+    loop = asyncio.get_event_loop()
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                _executor,
+                functools.partial(
+                    generator.generate,
+                    image_input=image_path,
+                    audio_input=audio_path,
+                    output_path=output_path,
+                    temp_dir=settings.temp_dir
+                )
+            ),
+            timeout=120.0  # 2 minute timeout for avatar generation
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail="Avatar generation timed out after 2 minutes"
+        )
 
     # Return response
     if result.success:
