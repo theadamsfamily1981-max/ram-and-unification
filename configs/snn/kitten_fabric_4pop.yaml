@@ -1,0 +1,179 @@
+# configs/snn/kitten_fabric_4pop.yaml
+#
+# Ara-SYNERGY "Kitten" fabric:
+#  - 4 populations: input → hidden1 → hidden2 → output
+#  - All N=4096 except output=2048
+#  - Low-rank masked synapses with TLS + CSR
+#  - Gates: r/N = 0.0078, k/N = 0.0156 (< 0.02), sparsity ≈ 98%
+
+fabric:
+  name: "kitten_4pop"
+  description: "Ara-SYNERGY Kitten fabric with 4 populations"
+  dt: 1.0               # simulation dt in ms (can be rescaled in HW)
+  time_steps: 256
+  max_rate_hz: 1000     # logical spike rate cap (for encoders)
+  seed: 42
+
+populations:
+  input:
+    N: 4096
+    neuron_type: lif
+    params:
+      v_th: 1.0
+      v_reset: 0.0
+      v_rest: 0.0
+      alpha: 0.95
+      beta: 0.85
+      tau_mem: 20.0
+      tau_syn: 5.0
+      refractory_steps: 2
+      reset_mode: subtract
+      bias_mean: 0.0
+      bias_std: 0.0
+
+  hidden1:
+    N: 4096
+    neuron_type: lif
+    params:
+      v_th: 1.0
+      v_reset: 0.0
+      v_rest: 0.0
+      alpha: 0.97
+      beta: 0.85
+      tau_mem: 25.0
+      tau_syn: 5.0
+      refractory_steps: 2
+      reset_mode: subtract
+      bias_mean: 0.0
+      bias_std: 0.0
+
+  hidden2:
+    N: 4096
+    neuron_type: lif
+    params:
+      v_th: 1.0
+      v_reset: 0.0
+      v_rest: 0.0
+      alpha: 0.97
+      beta: 0.85
+      tau_mem: 25.0
+      tau_syn: 5.0
+      refractory_steps: 2
+      reset_mode: subtract
+      bias_mean: 0.0
+      bias_std: 0.0
+
+  output:
+    N: 2048
+    neuron_type: lif
+    params:
+      v_th: 0.9
+      v_reset: 0.0
+      v_rest: 0.0
+      alpha: 0.98
+      beta: 0.85
+      tau_mem: 30.0
+      tau_syn: 5.0
+      refractory_steps: 2
+      reset_mode: subtract
+      bias_mean: 0.0
+      bias_std: 0.0
+
+projections:
+  # Dense(ish) backbone with low-rank masked synapses
+  - name: input_to_hidden1
+    pre: input
+    post: hidden1
+    synapse_type: lowrank_masked
+    params:
+      k: 64                 # avg degree = 64 (0.0156 * N)
+      r: 32                 # low-rank rank (0.0078 * N)
+      init_scale: 0.7
+      trainable: true
+    tls:
+      mode: uniform         # can be tls_scores later
+      k_per_row: 64
+
+  - name: hidden1_to_hidden2
+    pre: hidden1
+    post: hidden2
+    synapse_type: lowrank_masked
+    params:
+      k: 64
+      r: 32
+      init_scale: 0.7
+      trainable: true
+    tls:
+      mode: uniform
+      k_per_row: 64
+
+  - name: hidden2_to_output
+    pre: hidden2
+    post: output
+    synapse_type: lowrank_masked
+    params:
+      k: 64
+      r: 32
+      init_scale: 0.7
+      trainable: true
+    tls:
+      mode: uniform
+      k_per_row: 64
+
+  # Recurrent connections (can be disabled in HW)
+  - name: hidden1_recurrent
+    pre: hidden1
+    post: hidden1
+    synapse_type: lowrank_masked
+    params:
+      k: 32
+      r: 16
+      init_scale: 0.3
+      trainable: true
+    tls:
+      mode: uniform
+      k_per_row: 32
+
+  - name: hidden2_recurrent
+    pre: hidden2
+    post: hidden2
+    synapse_type: lowrank_masked
+    params:
+      k: 32
+      r: 16
+      init_scale: 0.3
+      trainable: true
+    tls:
+      mode: uniform
+      k_per_row: 32
+
+encoders:
+  # Map upstream model features to "input" population
+  rate_code:
+    type: rate
+    source: "tfan_hidden"   # logical hook name for TF-A-N features
+    target_population: input
+    lambda_scale: 1.0
+
+readouts:
+  # Treat "output" population spikes as readout vector
+  default:
+    population: output
+    mode: spike_count       # integrate spikes over T
+    normalize: true
+
+ci_constraints:
+  enabled: true
+  param_reduction_min_pct: 97.0
+  sparsity_min: 0.98
+  max_degree_frac: 0.02     # k/N <= 2%
+  max_rank_frac: 0.02       # r/N <= 2%
+  max_rank: 32
+  max_nnz_per_row: 64
+
+training:
+  spike_regularization:
+    target_rate: 0.1
+    lambda_rate: 0.01
+  gradient_surrogate: "fast_sigmoid"
+  surrogate_scale: 25.0
