@@ -5,8 +5,8 @@ from typing import Optional, Dict, Any, AsyncIterator
 import anthropic
 from anthropic import AsyncAnthropic
 
-from ..core.backend import AIBackend, AIProvider, Capabilities, Context, Response
-from ..utils.logger import get_logger
+from core.backend import AIBackend, AIProvider, Capabilities, Context, Response
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
