@@ -1,0 +1,41 @@
+{
+  "model_type": "tfan7b",
+  "architectures": ["TFANForCausalLM"],
+  "vocab_size": 32768,
+  "hidden_size": 4096,
+  "num_hidden_layers": 34,
+  "num_attention_heads": 32,
+  "num_kv_heads": 8,
+  "intermediate_size": 13312,
+  "ffn_mult": 3.25,
+  "max_position_embeddings": 32768,
+  "rms_norm_eps": 1e-6,
+  "rope_theta": 10000.0,
+  "rope_scaling": {
+    "type": "linear",
+    "factor": 1.0
+  },
+  "tie_word_embeddings": true,
+  "use_bias": false,
+  "activation": "swiglu",
+  "attention_impl": "ssa_radial_v1",
+  "ssa_keep_ratio": 0.33,
+  "ssa_local": 128,
+  "ssa_hops": 2,
+  "tls_alpha": 0.7,
+  "dropout": 0.0,
+  "attention_dropout": 0.0,
+  "initializer_range": 0.02,
+  "use_cache": true,
+  "bos_token_id": 1,
+  "eos_token_id": 2,
+  "pad_token_id": null,
+  "torch_dtype": "bfloat16",
+  "_name_or_path": "tfan-7b",
+  "transformers_version": "4.40.0",
+  "auto_map": {
+    "AutoConfig": "config.TFANConfig",
+    "AutoModel": "modeling_tfan.TFANModel",
+    "AutoModelForCausalLM": "modeling_tfan.TFANForCausalLM"
+  }
+}
