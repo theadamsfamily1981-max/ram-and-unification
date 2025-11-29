@@ -1,0 +1,404 @@
+/* Operation SCYTHE - GNOME Shell Theme
+ * Sci-Fi Cockpit Aesthetic with Glowing Elements
+ *
+ * Installation:
+ *   mkdir -p ~/.themes/Scythe-Theme/gnome-shell/
+ *   cp gnome-shell.css ~/.themes/Scythe-Theme/gnome-shell/
+ *   gsettings set org.gnome.shell.extensions.user-theme name 'Scythe-Theme'
+ *
+ * Requires: GNOME Shell User Themes extension
+ */
+
+/* ==========================================================================
+ * CRITICAL FIX: Shadow Visibility with Transparency
+ * ==========================================================================
+ * In GNOME Shell, shadow alpha is multiplied by background alpha.
+ * To get visible glowing shadows on transparent elements, background must
+ * have minimal non-zero opacity (e.g., 0.1 instead of 0.0).
+ */
+
+/* ==========================================================================
+ * Top Panel - Transparent with Cyan Glow
+ * ========================================================================== */
+
+#panel {
+    background-color: rgba(0, 15, 25, 0.15);  /* Minimal opacity for shadow visibility */
+    box-shadow: 0 0 20px rgba(0, 200, 255, 0.8);
+    border: none;
+    border-bottom: 1px solid rgba(0, 200, 255, 0.3);
+    height: 32px;
+}
+
+/* Panel buttons (app menu, system menu, etc.) */
+.panel-button {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    transition: all 0.3s ease;
+}
+
+.panel-button:hover {
+    background-color: rgba(0, 200, 255, 0.2);
+    box-shadow: 0 0 15px rgba(0, 200, 255, 1.0);
+    border-radius: 4px;
+}
+
+.panel-button:active,
+.panel-button:focus,
+.panel-button:checked {
+    background-color: rgba(0, 150, 255, 0.3);
+    box-shadow: 0 0 20px rgba(0, 255, 255, 1.0);
+    border-radius: 4px;
+}
+
+/* Panel text (clock, app name, etc.) */
+.panel-button .system-status-icon,
+.panel-button StLabel {
+    color: rgba(0, 255, 255, 1.0);
+    text-shadow: 0 0 5px rgba(0, 255, 255, 0.6);
+    font-weight: 500;
+}
+
+/* ==========================================================================
+ * Panel Separators - Glowing Lines
+ * ========================================================================== */
+
+.panel-separator {
+    background: linear-gradient(to bottom,
+        rgba(0, 200, 255, 0) 0%,
+        rgba(0, 200, 255, 0.8) 50%,
+        rgba(0, 200, 255, 0) 100%);
+    box-shadow: 0 0 5px rgba(0, 200, 255, 0.6);
+    width: 1px;
+    margin: 4px 8px;
+}
+
+/* ==========================================================================
+ * Popup Menus - Dark Glass with Glow
+ * ========================================================================== */
+
+.popup-menu {
+    background-color: rgba(5, 15, 25, 0.92);
+    border: 1px solid rgba(0, 200, 255, 0.4);
+    box-shadow: 0 4px 30px rgba(0, 200, 255, 0.5);
+    border-radius: 8px;
+    padding: 8px 0;
+}
+
+.popup-menu-content {
+    padding: 4px 0;
+}
+
+.popup-menu-item {
+    color: rgba(0, 255, 255, 0.9);
+    background-color: transparent;
+    border: none;
+    padding: 8px 16px;
+    transition: all 0.2s ease;
+}
+
+.popup-menu-item:hover {
+    background-color: rgba(0, 150, 255, 0.2);
+    box-shadow: inset 0 0 10px rgba(0, 200, 255, 0.4);
+    color: rgba(0, 255, 255, 1.0);
+}
+
+.popup-menu-item:active {
+    background-color: rgba(0, 200, 255, 0.3);
+    box-shadow: inset 0 0 15px rgba(0, 255, 255, 0.6);
+}
+
+/* Submenu indicators */
+.popup-menu-arrow {
+    color: rgba(0, 200, 255, 0.8);
+}
+
+/* ==========================================================================
+ * System Menu (Quick Settings) - Enhanced Glow
+ * ========================================================================== */
+
+.quick-settings {
+    background-color: rgba(5, 15, 25, 0.93);
+    border: 1px solid rgba(0, 200, 255, 0.5);
+    box-shadow: 0 8px 40px rgba(0, 200, 255, 0.6);
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.quick-toggle {
+    background-color: rgba(0, 30, 50, 0.5);
+    border: 1px solid rgba(0, 200, 255, 0.3);
+    border-radius: 20px;
+    padding: 10px 16px;
+    margin: 4px;
+    transition: all 0.3s ease;
+}
+
+.quick-toggle:hover {
+    background-color: rgba(0, 60, 100, 0.6);
+    border-color: rgba(0, 200, 255, 0.6);
+    box-shadow: 0 0 15px rgba(0, 200, 255, 0.7);
+}
+
+.quick-toggle:checked {
+    background-color: rgba(0, 150, 255, 0.4);
+    border-color: rgba(0, 255, 255, 0.8);
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.9);
+}
+
+.quick-toggle:checked StLabel {
+    color: rgba(0, 255, 255, 1.0);
+    text-shadow: 0 0 8px rgba(0, 255, 255, 0.8);
+}
+
+/* ==========================================================================
+ * Notifications - Critical Alert Styling
+ * ========================================================================== */
+
+.notification-banner {
+    background-color: rgba(5, 15, 25, 0.95);
+    border: 1px solid rgba(0, 200, 255, 0.5);
+    box-shadow: 0 4px 20px rgba(0, 200, 255, 0.6);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px;
+}
+
+.notification-banner .notification-title {
+    color: rgba(0, 255, 255, 1.0);
+    text-shadow: 0 0 6px rgba(0, 255, 255, 0.6);
+    font-weight: bold;
+}
+
+.notification-banner .notification-body {
+    color: rgba(100, 200, 255, 0.9);
+}
+
+/* Critical urgency notifications (red glow) */
+.notification-banner.critical {
+    border-color: rgba(255, 50, 50, 0.8);
+    box-shadow: 0 4px 25px rgba(255, 0, 0, 0.8);
+    animation: pulse-critical-notification 1.5s infinite;
+}
+
+.notification-banner.critical .notification-title {
+    color: rgba(255, 100, 100, 1.0);
+    text-shadow: 0 0 10px rgba(255, 0, 0, 1.0);
+}
+
+@keyframes pulse-critical-notification {
+    0%, 100% {
+        box-shadow: 0 4px 25px rgba(255, 0, 0, 0.8);
+        opacity: 1.0;
+    }
+    50% {
+        box-shadow: 0 4px 35px rgba(255, 0, 0, 1.0);
+        opacity: 0.85;
+    }
+}
+
+/* ==========================================================================
+ * Workspace Switcher - Glowing Grid
+ * ========================================================================== */
+
+.workspace-switcher {
+    background-color: rgba(5, 15, 25, 0.9);
+    border: 1px solid rgba(0, 200, 255, 0.4);
+    box-shadow: 0 0 30px rgba(0, 200, 255, 0.5);
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.workspace-switcher .ws-switcher-box {
+    background-color: rgba(0, 30, 50, 0.4);
+    border: 1px solid rgba(0, 200, 255, 0.3);
+    box-shadow: 0 0 5px rgba(0, 200, 255, 0.4);
+}
+
+.workspace-switcher .ws-switcher-active-up,
+.workspace-switcher .ws-switcher-active-down {
+    background-color: rgba(0, 150, 255, 0.5);
+    border-color: rgba(0, 255, 255, 0.8);
+    box-shadow: 0 0 20px rgba(0, 255, 255, 1.0);
+}
+
+/* ==========================================================================
+ * OSD (On-Screen Display) - Volume/Brightness Overlays
+ * ========================================================================== */
+
+.osd-window {
+    background-color: rgba(5, 15, 25, 0.92);
+    border: 2px solid rgba(0, 200, 255, 0.6);
+    box-shadow: 0 8px 40px rgba(0, 200, 255, 0.7);
+    border-radius: 16px;
+    padding: 24px;
+}
+
+.osd-window .level {
+    background-color: rgba(0, 30, 50, 0.6);
+    border: 1px solid rgba(0, 200, 255, 0.4);
+    height: 8px;
+    border-radius: 4px;
+}
+
+.osd-window .level-bar {
+    background-color: rgba(0, 200, 255, 0.9);
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+    border-radius: 4px;
+}
+
+.osd-window StLabel {
+    color: rgba(0, 255, 255, 1.0);
+    text-shadow: 0 0 8px rgba(0, 255, 255, 0.7);
+    font-size: 24px;
+    font-weight: bold;
+}
+
+/* ==========================================================================
+ * Search Entry - Glowing Input Field
+ * ========================================================================== */
+
+.search-entry {
+    background-color: rgba(0, 20, 40, 0.7);
+    border: 1px solid rgba(0, 200, 255, 0.4);
+    box-shadow: 0 0 10px rgba(0, 200, 255, 0.3);
+    border-radius: 20px;
+    padding: 10px 16px;
+    color: rgba(0, 255, 255, 1.0);
+    caret-color: rgba(0, 255, 255, 1.0);
+}
+
+.search-entry:focus {
+    border-color: rgba(0, 255, 255, 0.8);
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+}
+
+.search-entry StLabel.hint-text {
+    color: rgba(0, 200, 255, 0.5);
+}
+
+/* ==========================================================================
+ * Window Switcher (Alt+Tab) - Tactical Selection
+ * ========================================================================== */
+
+.switcher-list {
+    background-color: rgba(5, 15, 25, 0.95);
+    border: 2px solid rgba(0, 200, 255, 0.6);
+    box-shadow: 0 8px 50px rgba(0, 200, 255, 0.7);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.switcher-list .item-box {
+    background-color: rgba(0, 30, 50, 0.4);
+    border: 1px solid rgba(0, 200, 255, 0.2);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 4px;
+    transition: all 0.2s ease;
+}
+
+.switcher-list .item-box:hover {
+    background-color: rgba(0, 60, 100, 0.5);
+    border-color: rgba(0, 200, 255, 0.5);
+    box-shadow: 0 0 15px rgba(0, 200, 255, 0.6);
+}
+
+.switcher-list .item-box:selected {
+    background-color: rgba(0, 150, 255, 0.5);
+    border-color: rgba(0, 255, 255, 0.9);
+    box-shadow: 0 0 25px rgba(0, 255, 255, 1.0);
+}
+
+/* ==========================================================================
+ * Buttons - Standard Button Styling
+ * ========================================================================== */
+
+.button {
+    background-color: rgba(0, 30, 50, 0.6);
+    border: 1px solid rgba(0, 200, 255, 0.4);
+    box-shadow: 0 0 8px rgba(0, 200, 255, 0.3);
+    border-radius: 6px;
+    padding: 8px 16px;
+    color: rgba(0, 255, 255, 1.0);
+    transition: all 0.2s ease;
+}
+
+.button:hover {
+    background-color: rgba(0, 60, 100, 0.7);
+    border-color: rgba(0, 200, 255, 0.7);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.7);
+}
+
+.button:active,
+.button:focus {
+    background-color: rgba(0, 100, 150, 0.8);
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.9);
+}
+
+/* Destructive buttons (red glow) */
+.button.destructive-action {
+    background-color: rgba(50, 0, 0, 0.6);
+    border-color: rgba(255, 50, 50, 0.5);
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.4);
+}
+
+.button.destructive-action:hover {
+    background-color: rgba(100, 0, 0, 0.7);
+    border-color: rgba(255, 50, 50, 0.8);
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.8);
+}
+
+/* ==========================================================================
+ * Scrollbars - Subtle Glowing Track
+ * ========================================================================== */
+
+StScrollBar {
+    background-color: rgba(0, 15, 25, 0.3);
+}
+
+StScrollBar StButton#vhandle,
+StScrollBar StButton#hhandle {
+    background-color: rgba(0, 150, 255, 0.5);
+    border: 1px solid rgba(0, 200, 255, 0.4);
+    box-shadow: 0 0 8px rgba(0, 200, 255, 0.5);
+    border-radius: 4px;
+}
+
+StScrollBar StButton#vhandle:hover,
+StScrollBar StButton#hhandle:hover {
+    background-color: rgba(0, 200, 255, 0.6);
+    box-shadow: 0 0 12px rgba(0, 255, 255, 0.8);
+}
+
+/* ==========================================================================
+ * Custom SCYTHE Mode Indicators
+ * ========================================================================== */
+
+/* These can be used by GNOME Shell extensions for mode indication */
+.scythe-mode-standby {
+    color: rgba(100, 200, 255, 1.0);
+    text-shadow: 0 0 8px rgba(100, 200, 255, 0.8);
+}
+
+.scythe-mode-flight {
+    color: rgba(255, 150, 0, 1.0);
+    text-shadow: 0 0 8px rgba(255, 150, 0, 0.8);
+}
+
+.scythe-mode-alert {
+    color: rgba(255, 50, 50, 1.0);
+    text-shadow: 0 0 10px rgba(255, 0, 0, 1.0);
+    animation: pulse-alert-mode 1.5s infinite;
+}
+
+@keyframes pulse-alert-mode {
+    0%, 100% { opacity: 1.0; }
+    50% { opacity: 0.6; }
+}
+
+/* ==========================================================================
+ * End of SCYTHE Theme
+ * ==========================================================================
+ * "Built like a cathedral. Runs in your cathedral. Displayed in your cockpit."
+ */
