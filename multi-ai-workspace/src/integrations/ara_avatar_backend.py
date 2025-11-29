@@ -12,6 +12,7 @@ Ara is your local AI co-pilot that runs offline and delegates to online AIs when
 
 import asyncio
 import time
+import os
 from pathlib import Path
 from typing import Optional, Dict, Any, AsyncIterator
 import sys
@@ -63,9 +64,9 @@ class AraAvatarBackend(AIBackend):
     def __init__(
         self,
         name: str = "Ara",
-        ollama_model: str = "mistral",
-        ollama_url: str = "http://localhost:11434",
-        avatar_output_dir: str = "outputs/ara_responses",
+        ollama_model: Optional[str] = None,
+        ollama_url: Optional[str] = None,
+        avatar_output_dir: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None
     ):
         """
@@ -73,11 +74,26 @@ class AraAvatarBackend(AIBackend):
 
         Args:
             name: Display name (default: "Ara")
-            ollama_model: Ollama model for offline operation
-            ollama_url: Ollama API URL
+            ollama_model: Ollama model for offline operation (reads from OLLAMA_MODEL env var, defaults to 'ara')
+            ollama_url: Ollama API URL (reads from OLLAMA_BASE_URL env var)
             avatar_output_dir: Directory for avatar video outputs
             config: Additional configuration
         """
+        # Load environment variables from .env if it exists
+        self._load_env_file()
+
+        # Get model from env var or parameter, default to 'ara' (custom model)
+        if ollama_model is None:
+            ollama_model = os.getenv('OLLAMA_MODEL', 'ara')
+
+        # Get Ollama URL from env var or parameter
+        if ollama_url is None:
+            ollama_url = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+
+        # Get output directory from env var or parameter
+        if avatar_output_dir is None:
+            avatar_output_dir = os.getenv('AVATAR_OUTPUT_DIR', 'outputs/ara_responses')
+
         super().__init__(
             name=name,
             provider=AIProvider.CUSTOM,
@@ -102,7 +118,25 @@ class AraAvatarBackend(AIBackend):
         self.current_avatar_profile = "default"
         self.current_mood = "neutral"
 
-        logger.info(f"Ara Avatar Backend initialized (model: {ollama_model})")
+        logger.info(f"Ara Avatar Backend initialized (model: {ollama_model}, url: {ollama_url})")
+
+    def _load_env_file(self):
+        """Load environment variables from .env file if it exists."""
+        env_path = Path('.env')
+        if env_path.exists():
+            try:
+                with open(env_path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            key = key.strip()
+                            value = value.strip()
+                            # Only set if not already in environment
+                            if key not in os.environ:
+                                os.environ[key] = value
+            except Exception as e:
+                logger.warning(f"Could not load .env file: {e}")
 
     def _load_persona_config(self) -> Dict[str, Any]:
         """Load Ara persona configuration from YAML."""

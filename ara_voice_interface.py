@@ -46,7 +46,6 @@ class AraVoiceInterface:
         self,
         voice_enabled: bool = True,
         avatar_enabled: bool = True,
-        ollama_model: str = "mistral",
         tfan_url: str = "http://localhost:8080"
     ):
         """
@@ -55,19 +54,14 @@ class AraVoiceInterface:
         Args:
             voice_enabled: Enable voice input/output
             avatar_enabled: Enable avatar video generation
-            ollama_model: Ollama model for Ara backend
             tfan_url: T-FAN cockpit API URL
         """
         self.voice_enabled = voice_enabled
         self.avatar_enabled = avatar_enabled
 
-        # Initialize Ara backend
+        # Initialize Ara backend (uses OLLAMA_MODEL from .env, defaults to 'ara')
         print("🤖 Initializing Ara avatar backend...")
-        self.ara = AraAvatarBackend(
-            name="Ara",
-            ollama_model=ollama_model,
-            ollama_url="http://localhost:11434"
-        )
+        self.ara = AraAvatarBackend(name="Ara")
 
         # Initialize voice macro processor
         print("🎙️  Loading voice macros...")
@@ -83,7 +77,7 @@ class AraVoiceInterface:
         # Voice recognition (lazy loaded)
         self.recognizer = None
 
-        print("✨ Ara is online and ready!")
+        print(f"✨ Ara is online and ready! (using model: {self.ara.ollama_model})")
         self._speak_greeting()
 
     def _speak_greeting(self):
@@ -322,16 +316,14 @@ async def main():
     parser.add_argument("--text-only", action="store_true", help="Disable voice input/output")
     parser.add_argument("--no-avatar", action="store_true", help="Disable avatar video generation")
     parser.add_argument("--test", type=str, help="Test with a text input")
-    parser.add_argument("--model", type=str, default="mistral", help="Ollama model to use")
     parser.add_argument("--tfan-url", type=str, default="http://localhost:8080", help="T-FAN API URL")
 
     args = parser.parse_args()
 
-    # Create interface
+    # Create interface (model auto-detected from OLLAMA_MODEL in .env, defaults to 'ara')
     interface = AraVoiceInterface(
         voice_enabled=not args.text_only,
         avatar_enabled=not args.no_avatar,
-        ollama_model=args.model,
         tfan_url=args.tfan_url
     )
 
