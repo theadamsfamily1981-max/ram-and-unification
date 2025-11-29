@@ -1,445 +1,151 @@
-/**
- * @file avatar_inference.cu
- * @brief GPU Animation Inference Kernels for Cathedral Avatar System
- *
- * Hardware: NVIDIA RTX 5060 Ti (16GB GDDR7)
- * Target Latency: < 80ms for animation inference
- * Memory Strategy: Keep multiple personality mode weights loaded simultaneously
- *
- * Interface:
- *   - Input: Phoneme feature vectors from FPGA (via zero-copy DMA)
- *   - Output: 3D facial animation parameters (blendshapes, landmarks)
- *   - Modes: Cathedral, Cockpit, Lab, Comfort, Playful, Teaching
- */
+// gpu/avatar_inference.cu
+//
+// Skeleton CUDA C++ for RTX 5060 Ti animation interface.
+// - Uses FP16 (half) inputs/outputs.
+// - Shows pinned host buffer, device buffers, and a simple kernel.
+// Replace the dummy math with a real Audio2Face / Livatar-style model
+// (likely via TensorRT) later.
 
+#include <cstdio>
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
-#include <stdio.h>
 
-// ============================================================================
-// Configuration Constants
-// ============================================================================
+#define CUDA_CHECK(expr)                                                      \
+    do {                                                                      \
+        cudaError_t _err = (expr);                                            \
+        if (_err != cudaSuccess) {                                            \
+            fprintf(stderr, "CUDA error %s:%d: %s\n",                         \
+                    __FILE__, __LINE__, cudaGetErrorString(_err));           \
+        }                                                                     \
+    } while (0)
 
-#define MAX_PHONEME_FEATURES 128    // Maximum phoneme sequence length
-#define FEATURE_DIM 32              // Mel-frequency bins per phoneme
-#define BLENDSHAPE_DIM 52           // ARKit-compatible blendshapes
-#define LANDMARK_DIM 468            // MediaPipe-compatible landmarks (3D)
+// Simple FP16 kernel stub: phoneme_features → animation parameters.
+// Real implementation would apply a learned model here.
+__global__
+void audio2anim_kernel(const half* __restrict__ phoneme_features,
+                       half* __restrict__ anim_out,
+                       int n_frames,
+                       int feature_dim,
+                       int anim_dim) {
+    int frame_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (frame_idx >= n_frames) return;
 
-#define NUM_PERSONALITY_MODES 6
-#define CATHEDRAL_MODE 0
-#define COCKPIT_MODE 1
-#define LAB_MODE 2
-#define COMFORT_MODE 3
-#define PLAYFUL_MODE 4
-#define TEACHING_MODE 5
+    const half* in_row  = phoneme_features + frame_idx * feature_dim;
+    half*       out_row = anim_out         + frame_idx * anim_dim;
 
-// VRAM Budget Allocation (RTX 5060 Ti 16GB)
-#define BASE_MODEL_SIZE_GB 2.5f
-#define EMOTION_MODEL_SIZE_GB 1.8f
-#define MODE_WEIGHTS_SIZE_GB 0.8f   // Per mode
+    // Dummy transform: sum features and write to all anim dims.
+    float accum = 0.0f;
+    for (int i = 0; i < feature_dim; ++i) {
+        accum += __half2float(in_row[i]);
+    }
+    half val = __float2half(accum / (float)feature_dim);
 
-// ============================================================================
-// Type Definitions
-// ============================================================================
+    for (int j = 0; j < anim_dim; ++j) {
+        out_row[j] = val;
+    }
+}
 
-// Phoneme feature vector (from FPGA)
-struct PhonemeFeature {
-    half features[FEATURE_DIM];
-    float duration_ms;
-    uint16_t phoneme_id;
-    uint16_t reserved;
+// Simple host-side wrapper for one chunk
+struct AvatarInferenceContext {
+    // Tunable sizes matching FPGA chunk shape
+    int n_frames;
+    int feature_dim;
+    int anim_dim;
+
+    // Pinned host buffer for features (filled by DMA / PCIe from FPGA)
+    half* h_features_pinned;
+
+    // Device buffers
+    half* d_features;
+    half* d_anim;
 };
 
-// Cathedral personality mode parameters
-struct PersonalityMode {
-    float intensity;           // 0.0 - 1.0 (cathedral = 1.0, cockpit = 0.4)
-    float pitch_shift;         // Voice pitch modulation
-    float speed_factor;        // Speech speed modulation
-    float warmth;              // Emotional warmth parameter
-    half* mode_weights;        // FP16 model weights for this mode
-};
+bool init_avatar_inference(AvatarInferenceContext &ctx,
+                           int n_frames,
+                           int feature_dim,
+                           int anim_dim) {
+    ctx.n_frames    = n_frames;
+    ctx.feature_dim = feature_dim;
+    ctx.anim_dim    = anim_dim;
 
-// Emotional expression state
-struct EmotionalState {
-    float joy;
-    float sadness;
-    float anger;
-    float fear;
-    float surprise;
-    float disgust;
-    float intensity;           // Overall emotional intensity
-    float valence;             // Positive/negative emotional axis
-};
+    size_t feat_bytes = (size_t)n_frames * feature_dim * sizeof(half);
+    size_t anim_bytes = (size_t)n_frames * anim_dim    * sizeof(half);
 
-// Animation output (blendshapes + landmarks)
-struct AnimationFrame {
-    float blendshapes[BLENDSHAPE_DIM];     // ARKit blendshapes
-    float landmarks[LANDMARK_DIM * 3];     // 468 3D landmarks
-    EmotionalState emotion;
-    uint32_t frame_index;
-};
+    // Pinned host memory for DMA target
+    CUDA_CHECK(cudaHostAlloc((void**)&ctx.h_features_pinned,
+                             feat_bytes,
+                             cudaHostAllocDefault));
+    if (!ctx.h_features_pinned) return false;
 
-// ============================================================================
-// Global Device Memory (Persistent Across Frames)
-// ============================================================================
+    CUDA_CHECK(cudaMalloc((void**)&ctx.d_features, feat_bytes));
+    CUDA_CHECK(cudaMalloc((void**)&ctx.d_anim,     anim_bytes));
 
-// Base animation model weights (FP16 for performance)
-__device__ __constant__ half base_model_weights[256 * 1024];  // 2.5GB allocated
+    return (ctx.d_features != nullptr && ctx.d_anim != nullptr);
+}
 
-// Personality mode weights (loaded at startup)
-__device__ half* personality_mode_weights[NUM_PERSONALITY_MODES];
+void destroy_avatar_inference(AvatarInferenceContext &ctx) {
+    if (ctx.h_features_pinned) CUDA_CHECK(cudaFreeHost(ctx.h_features_pinned));
+    if (ctx.d_features)        CUDA_CHECK(cudaFree(ctx.d_features));
+    if (ctx.d_anim)            CUDA_CHECK(cudaFree(ctx.d_anim));
+}
 
-// Emotional expression model weights
-__device__ half* emotion_model_weights;
+bool run_avatar_chunk(AvatarInferenceContext &ctx,
+                      cudaStream_t stream) {
+    const size_t feat_bytes = (size_t)ctx.n_frames * ctx.feature_dim * sizeof(half);
+    const size_t anim_bytes = (size_t)ctx.n_frames * ctx.anim_dim    * sizeof(half);
 
-// ============================================================================
-// Pinned Host Memory Interface (Zero-Copy DMA from FPGA)
-// ============================================================================
+    // At this point, ctx.h_features_pinned should already be filled by DMA
+    // from the FPGA. Here we just push it to device and launch the kernel.
 
-/**
- * @brief Allocate pinned host memory for zero-copy DMA transfers
- *
- * This memory is accessible by both CPU and GPU without explicit copies,
- * enabling direct FPGA → GPU data flow via PCIe 5.0.
- *
- * @param size Size in bytes
- * @return Pointer to pinned memory
- */
-extern "C"
-void* allocate_pinned_buffer(size_t size) {
-    void* pinned_buffer = nullptr;
+    CUDA_CHECK(cudaMemcpyAsync(ctx.d_features,
+                               ctx.h_features_pinned,
+                               feat_bytes,
+                               cudaMemcpyHostToDevice,
+                               stream));
 
-    cudaError_t err = cudaHostAlloc(
-        &pinned_buffer,
-        size,
-        cudaHostAllocMapped | cudaHostAllocWriteCombined
+    int threads = 128;
+    int blocks  = (ctx.n_frames + threads - 1) / threads;
+
+    audio2anim_kernel<<<blocks, threads, 0, stream>>>(
+        ctx.d_features,
+        ctx.d_anim,
+        ctx.n_frames,
+        ctx.feature_dim,
+        ctx.anim_dim
     );
 
-    if (err != cudaSuccess) {
-        printf("ERROR: Failed to allocate pinned memory: %s\n",
-               cudaGetErrorString(err));
-        return nullptr;
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+
+    // In a real pipeline, you'd either:
+    // - keep d_anim for direct use by a renderer, or
+    // - copy back to host or a graphics API buffer.
+    // Here we just return true, assuming the renderer sees d_anim.
+    (void)anim_bytes;
+    return true;
+}
+
+// Optional minimal test entry point; safe to remove in production.
+#ifdef AVATAR_INFERENCE_STANDALONE_TEST
+int main() {
+    AvatarInferenceContext ctx{};
+    if (!init_avatar_inference(ctx, 32, 64, 50)) {
+        fprintf(stderr, "Failed to init avatar inference context\n");
+        return 1;
     }
 
-    return pinned_buffer;
-}
-
-/**
- * @brief Get device pointer for pinned host memory
- *
- * @param host_ptr Pinned host memory pointer
- * @return Device pointer for GPU access
- */
-extern "C"
-void* get_device_pointer(void* host_ptr) {
-    void* dev_ptr = nullptr;
-    cudaHostGetDevicePointer(&dev_ptr, host_ptr, 0);
-    return dev_ptr;
-}
-
-// ============================================================================
-// Animation Inference Kernel (FP16 Optimized)
-// ============================================================================
-
-/**
- * @brief Main animation inference kernel
- *
- * Processes phoneme features and generates facial animation parameters.
- * Uses FP16 for performance, FP32 for emotional precision.
- *
- * @param phoneme_features Input phoneme features (from FPGA)
- * @param mode_weights Personality mode weights (cathedral/cockpit/etc)
- * @param emotion_params Emotional state parameters
- * @param anim_out Output animation frames
- * @param n_phonemes Number of phonemes to process
- * @param mode_index Personality mode index (0-5)
- * @param emotion_intensity Emotional intensity scaling (0.0-1.0)
- */
-__global__ void audio2anim_kernel(
-    const half* phoneme_features,
-    const half* mode_weights,
-    const float* emotion_params,
-    AnimationFrame* anim_out,
-    int n_phonemes,
-    int mode_index,
-    float emotion_intensity
-) {
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (tid >= n_phonemes) return;
-
-    // ========================================================================
-    // Stage 1: Phoneme Feature Extraction
-    // ========================================================================
-    // TODO: Implement transformer-based feature extraction
-    // Expected latency: ~20ms for 128 phonemes
-
-    half feature_embedding[256];  // Intermediate representation
-
-    // Placeholder: Copy input features
-    for (int i = 0; i < FEATURE_DIM; i++) {
-        feature_embedding[i] = phoneme_features[tid * FEATURE_DIM + i];
+    // Fake fill features
+    for (int i = 0; i < 32 * 64; ++i) {
+        ctx.h_features_pinned[i] = __float2half(1.0f);
     }
 
-    // ========================================================================
-    // Stage 2: Personality Mode Modulation
-    // ========================================================================
-    // Apply personality-specific transformations
-    // Cathedral mode: intensity=1.0, formal, measured
-    // Cockpit mode: intensity=0.4, direct, efficient
+    cudaStream_t stream;
+    CUDA_CHECK(cudaStreamCreate(&stream));
 
-    float mode_scale = 1.0f;
-    switch (mode_index) {
-        case CATHEDRAL_MODE:
-            mode_scale = 1.00f;  // Full emotional depth
-            break;
-        case COCKPIT_MODE:
-            mode_scale = 0.40f;  // Restrained, focused
-            break;
-        case LAB_MODE:
-            mode_scale = 0.50f;  // Analytical, precise
-            break;
-        case COMFORT_MODE:
-            mode_scale = 0.60f;  // Warm, reassuring
-            break;
-        case PLAYFUL_MODE:
-            mode_scale = 0.45f;  // Light, energetic
-            break;
-        case TEACHING_MODE:
-            mode_scale = 0.35f;  // Clear, patient
-            break;
-    }
+    run_avatar_chunk(ctx, stream);
 
-    // ========================================================================
-    // Stage 3: Emotional Expression Synthesis (FP32 for precision)
-    // ========================================================================
-    // TODO: Implement emotional expression model inference
-    // This is where cathedral personality depth matters most
-
-    EmotionalState emotion;
-    emotion.intensity = emotion_intensity * mode_scale;
-    emotion.valence = emotion_params[0];  // Placeholder
-
-    // ========================================================================
-    // Stage 4: Blendshape Generation
-    // ========================================================================
-    // TODO: Generate ARKit-compatible blendshapes
-    // Expected latency: ~30ms for full sequence
-
-    AnimationFrame frame;
-    frame.emotion = emotion;
-    frame.frame_index = tid;
-
-    // Placeholder: Zero-initialize blendshapes
-    for (int i = 0; i < BLENDSHAPE_DIM; i++) {
-        frame.blendshapes[i] = 0.0f;
-    }
-
-    // ========================================================================
-    // Stage 5: 3D Landmark Prediction
-    // ========================================================================
-    // TODO: Generate MediaPipe-compatible 3D facial landmarks
-    // Expected latency: ~20ms
-
-    // Placeholder: Zero-initialize landmarks
-    for (int i = 0; i < LANDMARK_DIM * 3; i++) {
-        frame.landmarks[i] = 0.0f;
-    }
-
-    // Write output
-    anim_out[tid] = frame;
+    CUDA_CHECK(cudaStreamDestroy(stream));
+    destroy_avatar_inference(ctx);
+    return 0;
 }
-
-// ============================================================================
-// Personality Mode Management
-// ============================================================================
-
-/**
- * @brief Load personality mode weights into GPU memory
- *
- * Called at startup to load all 6 mode weight sets simultaneously.
- * 16GB VRAM allows keeping all modes resident for < 10ms switching.
- *
- * @param mode_index Mode index (0-5)
- * @param weights_host Host-side mode weights
- * @param weight_size Size in bytes
- */
-extern "C"
-void load_personality_mode(
-    int mode_index,
-    const half* weights_host,
-    size_t weight_size
-) {
-    if (mode_index >= NUM_PERSONALITY_MODES) {
-        printf("ERROR: Invalid mode index %d\n", mode_index);
-        return;
-    }
-
-    // Allocate device memory for this mode
-    half* dev_weights;
-    cudaMalloc(&dev_weights, weight_size);
-
-    // Copy weights to GPU
-    cudaMemcpy(
-        dev_weights,
-        weights_host,
-        weight_size,
-        cudaMemcpyHostToDevice
-    );
-
-    // Store pointer in global array
-    cudaMemcpyToSymbol(
-        personality_mode_weights,
-        &dev_weights,
-        sizeof(half*),
-        mode_index * sizeof(half*)
-    );
-
-    printf("Loaded personality mode %d (%zu MB)\n",
-           mode_index, weight_size / (1024 * 1024));
-}
-
-/**
- * @brief Switch active personality mode
- *
- * Fast mode switching by selecting pre-loaded weights.
- * Target latency: < 10ms
- *
- * @param new_mode Mode index to activate
- */
-extern "C"
-void switch_personality_mode(int new_mode) {
-    // Mode switching is instant - just change kernel parameter
-    // Weights are already loaded in GPU memory
-    printf("Switched to personality mode %d\n", new_mode);
-}
-
-// ============================================================================
-// Async Streaming Interface
-// ============================================================================
-
-/**
- * @brief Launch animation kernel asynchronously
- *
- * Enables overlapping FPGA TTS → GPU animation → rendering pipeline.
- *
- * @param phoneme_buffer Pinned buffer with FPGA phoneme features
- * @param output_buffer Output animation frames
- * @param n_phonemes Number of phonemes
- * @param mode Current personality mode
- * @param emotion_intensity Emotional intensity
- * @param stream CUDA stream for async execution
- */
-extern "C"
-void launch_animation_kernel_async(
-    void* phoneme_buffer,
-    void* output_buffer,
-    int n_phonemes,
-    int mode,
-    float emotion_intensity,
-    cudaStream_t stream
-) {
-    // Get device pointers for pinned memory
-    half* dev_phonemes = (half*)get_device_pointer(phoneme_buffer);
-    AnimationFrame* dev_output = (AnimationFrame*)get_device_pointer(output_buffer);
-
-    // Dummy emotion params (TODO: implement emotion detection)
-    float emotion_params[8] = {0.0f};
-    float* dev_emotion_params;
-    cudaMalloc(&dev_emotion_params, sizeof(emotion_params));
-    cudaMemcpyAsync(
-        dev_emotion_params,
-        emotion_params,
-        sizeof(emotion_params),
-        cudaMemcpyHostToDevice,
-        stream
-    );
-
-    // Get mode weights
-    half* mode_weights;
-    cudaMemcpyFromSymbol(
-        &mode_weights,
-        personality_mode_weights,
-        sizeof(half*),
-        mode * sizeof(half*)
-    );
-
-    // Launch kernel
-    int block_size = 256;
-    int grid_size = (n_phonemes + block_size - 1) / block_size;
-
-    audio2anim_kernel<<<grid_size, block_size, 0, stream>>>(
-        dev_phonemes,
-        mode_weights,
-        dev_emotion_params,
-        dev_output,
-        n_phonemes,
-        mode,
-        emotion_intensity
-    );
-
-    // Cleanup emotion params after kernel completes
-    cudaStreamSynchronize(stream);
-    cudaFree(dev_emotion_params);
-}
-
-// ============================================================================
-// Performance Monitoring
-// ============================================================================
-
-/**
- * @brief Measure kernel latency
- *
- * @param stream CUDA stream
- * @return Latency in milliseconds
- */
-extern "C"
-float measure_kernel_latency(cudaStream_t stream) {
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-
-    cudaEventRecord(start, stream);
-    cudaStreamSynchronize(stream);
-    cudaEventRecord(stop, stream);
-
-    cudaEventSynchronize(stop);
-
-    float latency_ms = 0.0f;
-    cudaEventElapsedTime(&latency_ms, start, stop);
-
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
-
-    return latency_ms;
-}
-
-// ============================================================================
-// TODO: Advanced Features
-// ============================================================================
-
-/*
- * TODO (Stage I - Core):
- *   [ ] Implement transformer-based phoneme encoder
- *   [ ] Implement emotional expression model (FP32 precision)
- *   [ ] Implement blendshape decoder (ARKit 52 blendshapes)
- *   [ ] Implement 3D landmark predictor (468 MediaPipe landmarks)
- *
- * TODO (Stage II - Optimization):
- *   [ ] Implement TensorRT acceleration for inference
- *   [ ] Add FP16/FP32 mixed precision tuning
- *   [ ] Optimize kernel fusion (reduce memory bandwidth)
- *   [ ] Add multi-stream overlapping (TTS + animation + rendering)
- *
- * TODO (Stage III - Cathedral Integration):
- *   [ ] Implement cathedral personality depth model
- *   [ ] Add emotional intensity scaling per mode
- *   [ ] Integrate with cathedral manifesto context
- *   [ ] Add mode transition smoothing (< 10ms switching)
- *
- * Expected Resource Utilization (RTX 5060 Ti 16GB):
- *   - VRAM: ~12GB (15GB available)
- *   - CUDA Cores: ~2000 / 3840 (50% utilization)
- *   - Memory Bandwidth: ~300 GB/s / 448 GB/s (67%)
- *   - Latency: 60-80ms per animation frame
- */
+#endif

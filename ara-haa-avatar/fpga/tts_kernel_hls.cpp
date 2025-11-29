@@ -1,207 +1,84 @@
-/**
- * @file tts_kernel_hls.cpp
- * @brief Text-to-Speech Acceleration Kernel for SQRL Forest Kitten (Xilinx VU35P)
- *
- * Hardware: SQRL Forest Kitten with HBM2
- * Target Latency: < 100ms for typical sentence
- * Memory Strategy: Acoustic unit database stored in HBM2 for ultra-low lookup latency
- *
- * Interface:
- *   - Input: AXI-Stream of phoneme IDs
- *   - Output: AXI-Stream of acoustic feature vectors
- *   - Memory: AXI4 master port to HBM2 for acoustic database
- */
+// fpga/tts_kernel_hls.cpp
+//
+// Skeleton Vitis HLS kernel for FPGA-side TTS feature streaming
+// Target: SQRL Forest Kitten (Xilinx VU33P/VU35P with HBM2)
+//
+// This is NOT a real TTS implementation – it's a synthesizable shell
+// with AXI-Stream I/O and an HBM2-backed "acoustic database" m_axi port.
+// Fill in the core TTS logic later.
 
-#include "ap_axi_sdata.h"
-#include "hls_stream.h"
-#include "ap_int.h"
+#include <ap_int.h>
+#include <hls_stream.h>
+#include <ap_axi_sdata.h>
 
-// ============================================================================
-// Type Definitions
-// ============================================================================
+// Simple AXI-Stream payload: 32-bit data, no side channels
+typedef ap_axiu<32, 0, 0, 0> axis_word_t;
 
-// Phoneme ID input stream (8-bit phoneme codes)
-typedef ap_axis<8, 0, 0, 0> phoneme_stream_t;
+// Tunable constants
+static const int FEATURE_DIM = 64;   // e.g., mel / phoneme feature dim
+static const int CHUNK_FRAMES = 16;  // frames per streamed chunk
 
-// Acoustic feature output stream (128-bit feature vectors: 4x float32)
-typedef ap_axis<128, 0, 0, 0> feature_stream_t;
-
-// Acoustic unit database entry (mel-spectrogram features)
-struct AcousticUnit {
-    float features[32];  // 32 mel-frequency bins
-    ap_uint<16> duration_ms;
-    ap_uint<16> reserved;
-};
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-#define PHONEME_DB_SIZE 256        // Number of phonemes in database
-#define MAX_PHONEMES_PER_SENTENCE 128
-#define HBM_BANK_ACOUSTIC_DB 0     // HBM2 bank for acoustic database
-
-// ============================================================================
-// HBM2-Backed Acoustic Database
-// ============================================================================
-
-/**
- * @brief Pre-loaded acoustic unit database stored in HBM2
- *
- * This database contains pre-recorded acoustic features for each phoneme.
- * Storing in HBM2 provides ultra-low latency random access (~100ns)
- * vs external DRAM (~300ns+).
- *
- * HLS Pragma: Map to HBM2 Bank 0 for deterministic access
- */
-static AcousticUnit acoustic_database[PHONEME_DB_SIZE];
-#pragma HLS bind_storage variable=acoustic_database type=RAM_T2P impl=URAM
-#pragma HLS INTERFACE m_axi port=acoustic_database bundle=HBM_BANK0 \
-    offset=slave depth=PHONEME_DB_SIZE
-
-// ============================================================================
-// TTS Synthesis Kernel (Top-Level)
-// ============================================================================
-
-/**
- * @brief Main TTS synthesis kernel
- *
- * Reads phoneme IDs from input stream, looks up acoustic features from HBM2
- * database, and streams out feature vectors for GPU animation.
- *
- * @param input_phonemes  AXI-Stream input of phoneme IDs
- * @param output_features AXI-Stream output of acoustic feature vectors
- * @param num_phonemes    Number of phonemes to process
- * @param mode            Synthesis mode (0=fast, 1=quality)
- *
- * Expected Latency:
- *   - Lookup per phoneme: ~100ns (HBM2 access)
- *   - Processing per phoneme: ~200ns (feature extraction)
- *   - Total for 20 phonemes: ~6us + streaming overhead
- */
+// Top-level kernel
 void tts_kernel(
-    hls::stream<phoneme_stream_t> &input_phonemes,
-    hls::stream<feature_stream_t> &output_features,
-    int num_phonemes,
-    int mode
+    hls::stream<axis_word_t> &text_in,      // AXI-Stream: input tokens / phoneme IDs
+    hls::stream<axis_word_t> &feat_out,     // AXI-Stream: output feature chunks
+    const ap_uint<16> *acoustic_database,   // m_axi: HBM-backed acoustic units
+    int db_size                             // number of entries in acoustic_database
 ) {
-    // Interface pragmas for Vitis HLS
-    #pragma HLS INTERFACE axis port=input_phonemes
-    #pragma HLS INTERFACE axis port=output_features
-    #pragma HLS INTERFACE s_axilite port=num_phonemes
-    #pragma HLS INTERFACE s_axilite port=mode
-    #pragma HLS INTERFACE s_axilite port=return
+#pragma HLS INTERFACE axis      port=text_in
+#pragma HLS INTERFACE axis      port=feat_out
 
-    // Pipeline configuration for low latency
-    #pragma HLS PIPELINE II=1
-    #pragma HLS DATAFLOW
+    // Map acoustic_database into a specific HBM bank
+#pragma HLS INTERFACE m_axi     port=acoustic_database offset=slave bundle=HBM_BANK0 depth=65536
+#pragma HLS INTERFACE s_axilite port=acoustic_database bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=db_size          bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=return           bundle=CTRL
 
-    // ========================================================================
-    // Main Processing Loop
-    // ========================================================================
+    // Example: small local cache or LUT in BRAM for ultra-hot paths
+    // (real design would prefetch or cache parts of the DB)
+    static ap_uint<16> local_lut[256];
+#pragma HLS BIND_STORAGE variable=local_lut type=RAM_T2P impl=BRAM
+#pragma HLS ARRAY_PARTITION variable=local_lut complete dim=1
 
-    PHONEME_LOOP:
-    for (int i = 0; i < num_phonemes; i++) {
-        #pragma HLS LOOP_TRIPCOUNT min=1 max=MAX_PHONEMES_PER_SENTENCE avg=20
+    // Simple dummy init (you'll likely move this to a separate init phase)
+    init_loop:
+    for (int i = 0; i < 256; ++i) {
+#pragma HLS PIPELINE II=1
+        local_lut[i] = (i < db_size) ? acoustic_database[i] : 0;
+    }
 
-        // Read phoneme ID from input stream
-        phoneme_stream_t phoneme_in;
-        input_phonemes.read(phoneme_in);
+    // Main streaming loop:
+    // - Read tokens from text_in
+    // - For each token, look up some acoustic data
+    // - Emit FEATURE_DIM * CHUNK_FRAMES "feature" words on feat_out
+    // This is a placeholder; real logic will be more complex.
+main_loop:
+    while (!text_in.empty()) {
+#pragma HLS PIPELINE II=1
+        axis_word_t in_word = text_in.read();
+        ap_uint<32> token_id = in_word.data;
 
-        ap_uint<8> phoneme_id = phoneme_in.data;
-        bool is_last = phoneme_in.last;
+        // Simple guarded lookup into local LUT and/or HBM DB
+        ap_uint<16> base_idx = (token_id % db_size);
+        ap_uint<16> base_val = acoustic_database[base_idx];
 
-        // ====================================================================
-        // HBM2 Acoustic Database Lookup
-        // ====================================================================
-        // This is the critical latency path: fetching acoustic features
-        // from HBM2. The pragma above ensures this is mapped to HBM Bank 0.
+        // For each token, synthesize a small feature chunk stream
+        // In a real design you'd generate mel / phoneme features, etc.
+    chunk_loop:
+        for (int f = 0; f < CHUNK_FRAMES * FEATURE_DIM; ++f) {
+#pragma HLS PIPELINE II=1
+            axis_word_t out_word;
+            ap_uint<32> feature_val = (base_val + f) & 0xFFFF;
 
-        AcousticUnit unit = acoustic_database[phoneme_id];
+            out_word.data = feature_val;
+            out_word.keep = -1;   // all bytes valid
+            out_word.strb = -1;
+            out_word.last = (f == (CHUNK_FRAMES * FEATURE_DIM - 1)) ? 1 : 0;
+            out_word.user = 0;
+            out_word.id   = 0;
+            out_word.dest = 0;
 
-        // ====================================================================
-        // Feature Extraction and Streaming Output
-        // ====================================================================
-        // TODO: Implement actual concatenative synthesis or parametric TTS
-        // For now, we stream out the raw acoustic features
-
-        // Pack features into 128-bit AXI stream (4 floats per transfer)
-        FEATURE_PACK_LOOP:
-        for (int f = 0; f < 32; f += 4) {
-            #pragma HLS PIPELINE II=1
-
-            feature_stream_t feature_out;
-
-            // Pack 4x float32 features into 128-bit data field
-            feature_out.data(31, 0)   = *reinterpret_cast<ap_uint<32>*>(&unit.features[f+0]);
-            feature_out.data(63, 32)  = *reinterpret_cast<ap_uint<32>*>(&unit.features[f+1]);
-            feature_out.data(95, 64)  = *reinterpret_cast<ap_uint<32>*>(&unit.features[f+2]);
-            feature_out.data(127, 96) = *reinterpret_cast<ap_uint<32>*>(&unit.features[f+3]);
-
-            // Mark last transfer for this phoneme
-            feature_out.last = (i == num_phonemes - 1) && (f == 28);
-
-            output_features.write(feature_out);
+            feat_out.write(out_word);
         }
     }
 }
-
-// ============================================================================
-// Database Initialization (Host-side, called before kernel)
-// ============================================================================
-
-/**
- * @brief Initialize acoustic database in HBM2
- *
- * This function is called from the host (Python/C++) to populate the
- * acoustic database before running the TTS kernel.
- *
- * @param host_db Pointer to host-side acoustic database
- * @param size    Number of acoustic units to load
- *
- * NOTE: This is a placeholder. Actual implementation requires:
- *   - Loading pre-trained acoustic models
- *   - Converting to mel-spectrogram features
- *   - DMA transfer to HBM2 via AXI4 master interface
- */
-void init_acoustic_database(const AcousticUnit* host_db, int size) {
-    #pragma HLS INTERFACE m_axi port=host_db bundle=gmem
-    #pragma HLS INTERFACE s_axilite port=size
-    #pragma HLS INTERFACE s_axilite port=return
-
-    // DMA transfer from host DDR to FPGA HBM2
-    DATABASE_INIT_LOOP:
-    for (int i = 0; i < size; i++) {
-        #pragma HLS PIPELINE II=1
-        acoustic_database[i] = host_db[i];
-    }
-}
-
-// ============================================================================
-// TODO: Advanced Features
-// ============================================================================
-
-/*
- * TODO (Stage I - Core):
- *   [ ] Implement actual concatenative TTS synthesis
- *   [ ] Add prosody modeling (pitch, duration, intensity)
- *   [ ] Support for emotional/personality mode parameters
- *
- * TODO (Stage II - Optimization):
- *   [ ] Optimize HBM2 access patterns (burst transfers)
- *   [ ] Add prefetching for next phoneme lookup
- *   [ ] Implement streaming overlap (start GPU inference early)
- *
- * TODO (Stage III - Cathedral Integration):
- *   [ ] Add personality mode acoustic variations
- *   [ ] Support for emotional intensity scaling
- *   [ ] Integrate with cathedral manifesto context
- *
- * Expected Resource Utilization (VU35P):
- *   - LUTs: ~15K (< 5% of 522K available)
- *   - FFs: ~20K (< 5% of 1045K available)
- *   - BRAMs: ~50 (< 5% of 1080 available)
- *   - URAMs: ~100 (< 30% of 320 available, for acoustic DB)
- *   - DSPs: ~20 (< 2% of 1920 available)
- *   - HBM2: 1 bank (of 2 available, 4GB)
- */
