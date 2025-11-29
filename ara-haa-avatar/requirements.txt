@@ -1,0 +1,34 @@
+# Cathedral Avatar System - Python Dependencies
+
+# Core dependencies
+numpy>=1.24.0
+scipy>=1.10.0
+
+# GPU acceleration
+pycuda>=2024.1
+torch>=2.1.0
+torchvision>=0.16.0
+
+# Video and rendering
+opencv-python>=4.8.0
+pillow>=10.0.0
+
+# Audio processing
+librosa>=0.10.0
+soundfile>=0.12.0
+pyaudio>=0.2.13
+
+# Logging and monitoring
+loguru>=0.7.0
+tqdm>=4.66.0
+
+# Optional: FPGA interface
+# pyfpga  # May need custom build from source
+
+# Optional: TensorRT acceleration (requires CUDA + TensorRT installed)
+# nvidia-tensorrt>=8.6.0
+
+# Development dependencies
+pytest>=7.4.0
+black>=23.7.0
+mypy>=1.5.0
