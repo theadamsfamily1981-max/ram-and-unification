@@ -1,0 +1,32 @@
+[Unit]
+Description=Ara Real-Time Slice
+Documentation=https://github.com/theadamsfamily1981-max/ram-and-unification
+Before=slices.target
+
+[Slice]
+# Enable resource accounting for monitoring
+CPUAccounting=true
+MemoryAccounting=true
+IOAccounting=true
+
+# Pin all services in this slice to isolated cores 8-15
+# Adjust to match your grub isolcpus configuration
+AllowedCPUs=8-15
+
+# Optional: Hard CPU quota (60% of 8 cores = ~4.8 cores worth)
+# Uncomment if you want to cap Ara's CPU usage
+# CPUQuota=60%
+
+# Memory management for RT workloads
+# Kill processes in this slice first if system runs out of swap
+ManagedOOMSwap=kill
+
+# Allow memory overcommit for RT processes
+# MemoryHigh: Soft limit (start throttling)
+# MemoryMax: Hard limit (OOM kill)
+# Uncomment and adjust based on your VRAM + system RAM
+# MemoryHigh=12G
+# MemoryMax=16G
+
+[Install]
+WantedBy=slices.target

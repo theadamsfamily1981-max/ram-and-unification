@@ -1,0 +1,49 @@
+[Unit]
+Description=Ara HAA Orchestrator (FPGA+GPU Pipeline)
+Documentation=https://github.com/theadamsfamily1981-max/ram-and-unification
+After=graphical-session.target
+Wants=ara-rt.slice
+
+[Service]
+# Run in RT slice (user-level services can reference system slices)
+Slice=ara-rt.slice
+
+# Execute orchestrator with SCHED_FIFO priority 80
+# chrt -f 80: Set FIFO scheduling with priority 80 (range: 1-99)
+ExecStart=/usr/bin/chrt -f 80 /usr/bin/python3 %h/ara-haa-avatar/python/orchestrator.py
+
+# Pin to isolated cores (must match grub isolcpus)
+CPUAffinity=8 9 10 11 12 13 14 15
+
+# Set process niceness (negative = higher priority)
+Nice=-15
+
+# Set I/O scheduling class to realtime
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+
+# Resource limits for RT operation
+# LimitRTPRIO: Allow setting realtime priority
+# LimitMEMLOCK: Allow unlimited locked memory (for pinned DMA buffers)
+LimitRTPRIO=95
+LimitMEMLOCK=infinity
+
+# Restart policy
+Restart=always
+RestartSec=1
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ara-orchestrator
+
+# Security: Run as user (not root)
+# This assumes your user has CAP_SYS_NICE for RT scheduling
+# If not, you may need to add to /etc/security/limits.conf:
+#   your_username - rtprio 95
+#   your_username - memlock unlimited
+
+[Install]
+WantedBy=default.target

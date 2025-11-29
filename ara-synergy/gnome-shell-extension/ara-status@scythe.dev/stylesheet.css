@@ -1,0 +1,52 @@
+/* Ara Status Indicator - GNOME Shell Extension Stylesheet
+ *
+ * Icon state colors and animations for different Ara states
+ */
+
+/* IDLE state - Dim blue, subtle presence */
+.ara-status-icon-idle {
+    color: rgba(150, 150, 255, 0.6);
+    text-shadow: 0 0 4px rgba(150, 150, 255, 0.4);
+}
+
+/* FLIGHT/THINKING state - Cyan glow, active but calm */
+.ara-status-icon-flight {
+    color: rgba(0, 200, 255, 0.9);
+    text-shadow: 0 0 8px rgba(0, 200, 255, 0.9);
+}
+
+/* BATTLE/SPEAKING state - Orange/amber glow, high activity */
+.ara-status-icon-battle {
+    color: rgba(255, 180, 0, 0.95);
+    text-shadow: 0 0 12px rgba(255, 120, 0, 1.0);
+}
+
+/* CRITICAL state - Red pulsing glow, urgent attention */
+.ara-status-icon-critical {
+    color: rgba(255, 40, 40, 1.0);
+    animation: ara-critical-pulse 0.8s infinite alternate;
+}
+
+@keyframes ara-critical-pulse {
+    from {
+        text-shadow: 0 0 6px rgba(255, 0, 0, 0.8);
+        opacity: 0.9;
+    }
+    to {
+        text-shadow: 0 0 16px rgba(255, 0, 0, 1.0);
+        opacity: 1.0;
+    }
+}
+
+/* Menu items with mode colors */
+.popup-menu-item.ara-mode-cruise {
+    color: rgba(150, 150, 255, 0.9);
+}
+
+.popup-menu-item.ara-mode-flight {
+    color: rgba(0, 200, 255, 0.9);
+}
+
+.popup-menu-item.ara-mode-battle {
+    color: rgba(255, 180, 0, 0.9);
+}

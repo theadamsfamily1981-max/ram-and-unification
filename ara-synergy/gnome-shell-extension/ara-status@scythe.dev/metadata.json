@@ -1,0 +1,8 @@
+{
+  "uuid": "ara-status@scythe.dev",
+  "name": "Ara Status Indicator",
+  "description": "Hyper-reactive Ara HAA status indicator and mode switcher. Listens to D-Bus telemetry and reconfigures cockpit in realtime.",
+  "shell-version": ["43", "44", "45", "46"],
+  "version": 2,
+  "url": "https://github.com/theadamsfamily1981-max/ram-and-unification"
+}
