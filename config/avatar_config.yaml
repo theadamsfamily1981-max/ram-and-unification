@@ -1,0 +1,185 @@
+# Avatar API Configuration
+# Comprehensive settings for avatar generation, TTS, and voice synthesis
+
+# Performance Settings
+performance:
+  # Thread pool workers for avatar generation
+  max_avatar_workers: 3
+
+  # Thread pool workers for TTS/RVC processing
+  max_tts_workers: 2
+
+  # Enable GPU acceleration (auto-detect if true)
+  gpu_enabled: true
+
+  # Force specific device (cuda, mps, cpu, or auto)
+  device: "auto"
+
+  # Request queue size
+  max_queue_size: 100
+
+# Timeout Settings (seconds)
+timeouts:
+  # Avatar video generation timeout
+  avatar_generation: 120
+
+  # TTS audio generation timeout
+  tts_generation: 30
+
+  # RVC voice conversion timeout
+  rvc_conversion: 20
+
+  # Ollama LLM response timeout
+  ollama_timeout: 60
+
+# Caching Settings
+cache:
+  # Enable avatar generation caching
+  enabled: true
+
+  # Cache directory
+  cache_dir: "cache/avatars"
+
+  # Maximum cache size (MB)
+  max_cache_size_mb: 5000
+
+  # Cache TTL (hours)
+  cache_ttl_hours: 24
+
+  # Enable cache compression
+  compress: true
+
+# Voice/TTS Settings
+voice:
+  # TTS Engine: "coqui", "silero", "alltalk", "rvc"
+  engine: "rvc"
+
+  # Default voice model
+  default_voice: "ara"
+
+  # Voice settings for Ara
+  ara:
+    # RVC model path (if using RVC)
+    rvc_model: "models/rvc/Ara.pth"
+
+    # RVC index file
+    rvc_index: "models/rvc/Ara.index"
+
+    # Pitch adjustment (semitones, can be negative)
+    pitch: 0.12
+
+    # Index rate for RVC (0.0-1.0, higher = more like training data)
+    index_rate: 0.65
+
+    # Voice characteristics
+    speed: 0.95  # Slightly slower, sultry
+
+    # Base TTS voice (before RVC conversion)
+    base_tts_voice: "jenny"
+
+    # Voice profile description
+    description: "Soft contralto, warm and expressive"
+
+# Oobabooga Integration
+oobabooga:
+  # Enable oobabooga integration
+  enabled: true
+
+  # API endpoint
+  api_url: "http://localhost:5000"
+
+  # TTS extensions to use
+  tts_extensions:
+    - "silero_tts"
+    - "alltalk_tts"
+
+  # RVC extension settings
+  rvc_enabled: true
+  rvc_pitch: 0.12
+  rvc_index_rate: 0.65
+
+  # Streaming mode
+  streaming: true
+
+# Avatar Generation Settings
+avatar:
+  # Output FPS
+  output_fps: 25
+
+  # Output resolution
+  output_resolution: 512
+
+  # Quality mode: "standard" or "high"
+  quality_mode: "standard"
+
+  # Video codec
+  codec: "libx264"
+
+  # Video compression (CRF: 0-51, lower = better quality)
+  crf: 23
+
+  # Enable video streaming
+  enable_streaming: true
+
+# Monitoring & Metrics
+monitoring:
+  # Enable Prometheus metrics
+  enable_metrics: true
+
+  # Metrics port
+  metrics_port: 9090
+
+  # Enable detailed logging
+  detailed_logging: true
+
+  # Log directory
+  log_dir: "logs"
+
+# Auto-scaling Settings
+autoscaling:
+  # Enable dynamic worker adjustment
+  enabled: true
+
+  # CPU threshold for scaling up (%)
+  cpu_scale_up_threshold: 50
+
+  # CPU threshold for scaling down (%)
+  cpu_scale_down_threshold: 80
+
+  # Minimum available memory for scaling up (GB)
+  memory_threshold_gb: 4
+
+  # Min/max workers
+  min_workers: 1
+  max_workers: 8
+
+# Request Management
+requests:
+  # Enable request prioritization
+  enable_priority_queue: true
+
+  # Enable job cancellation
+  enable_cancellation: true
+
+  # Max concurrent jobs
+  max_concurrent_jobs: 5
+
+  # Job retention time (hours)
+  job_retention_hours: 48
+
+# Output Settings
+output:
+  # Output directory
+  output_dir: "outputs/ara_responses"
+
+  # Temp directory
+  temp_dir: "temp"
+
+  # Upload directory
+  upload_dir: "uploads"
+
+  # Auto-cleanup old files
+  auto_cleanup: true
+
+  # Cleanup threshold (days)
+  cleanup_after_days: 7
