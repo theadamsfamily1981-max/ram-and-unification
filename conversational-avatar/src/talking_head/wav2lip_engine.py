@@ -549,7 +549,9 @@ class Wav2LipTalkingHead:
         out.release()
 
         if include_audio:
-            # Combine video and audio using ffmpeg
+            # Combine video and audio using ffmpeg with timeout protection
+            FFMPEG_TIMEOUT_SECONDS = 120  # 2 minute timeout for ffmpeg
+
             try:
                 cmd = [
                     'ffmpeg', '-y', '-loglevel', 'error',
@@ -563,19 +565,26 @@ class Wav2LipTalkingHead:
                     str(output_path)
                 ]
 
-                subprocess.run(cmd, check=True, capture_output=True)
+                subprocess.run(cmd, check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_SECONDS)
 
                 # Clean up temp file
                 temp_video.unlink()
 
+            except subprocess.TimeoutExpired:
+                logger.warning(f"FFmpeg timed out after {FFMPEG_TIMEOUT_SECONDS}s, using video without audio")
+                if temp_video.exists():
+                    temp_video.rename(output_path)
+
             except subprocess.CalledProcessError as e:
                 logger.warning(f"FFmpeg failed: {e.stderr.decode()}")
                 logger.info("Using video without audio")
-                temp_video.rename(output_path)
+                if temp_video.exists():
+                    temp_video.rename(output_path)
 
             except FileNotFoundError:
                 logger.warning("FFmpeg not found, using video without audio")
-                temp_video.rename(output_path)
+                if temp_video.exists():
+                    temp_video.rename(output_path)
         else:
             temp_video.rename(output_path)
 
@@ -643,5 +652,7 @@ class Wav2LipTalkingHead:
         """Cleanup on deletion."""
         try:
             self.cleanup()
-        except:
+        except Exception:
+            # Silently ignore cleanup errors during deletion
+            # but don't use bare except which catches SystemExit/KeyboardInterrupt
             pass

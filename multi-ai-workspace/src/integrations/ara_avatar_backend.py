@@ -412,11 +412,14 @@ class AraAvatarBackend(AIBackend):
                         timeout=60.0  # 60 second timeout for avatar generation
                     )
 
-                    if result and result.get("success"):
+                    # FIX: result is a GenerationResult dataclass, not a dict
+                    # Check for success attribute instead of .get() method
+                    if result and getattr(result, 'success', False):
                         video_path = str(video_path)
                     else:
+                        error_msg = getattr(result, 'error_message', 'Unknown error') if result else 'No result'
                         video_path = None
-                        logger.error(f"Avatar generation failed: {result}")
+                        logger.error(f"Avatar generation failed: {error_msg}")
                 except asyncio.TimeoutError:
                     video_path = None
                     logger.error("Avatar generation timed out after 60 seconds")

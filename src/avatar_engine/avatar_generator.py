@@ -230,8 +230,10 @@ class AvatarGenerator:
 
         out.release()
 
-        # Combine video and audio using ffmpeg
+        # Combine video and audio using ffmpeg with timeout protection
         import subprocess
+        FFMPEG_TIMEOUT_SECONDS = 120  # 2 minute timeout for ffmpeg
+
         try:
             cmd = [
                 'ffmpeg', '-y',
@@ -243,10 +245,19 @@ class AvatarGenerator:
                 '-shortest',
                 str(output_path)
             ]
-            subprocess.run(cmd, check=True, capture_output=True)
+            subprocess.run(cmd, check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            # FFmpeg hung - use video without audio as fallback
+            import logging
+            logging.getLogger(__name__).warning(
+                f"FFmpeg timed out after {FFMPEG_TIMEOUT_SECONDS}s, using video without audio"
+            )
+            if temp_video.exists():
+                temp_video.rename(output_path)
         except subprocess.CalledProcessError:
             # If ffmpeg fails, use video without audio
-            temp_video.rename(output_path)
+            if temp_video.exists():
+                temp_video.rename(output_path)
         finally:
             if temp_video.exists():
                 temp_video.unlink()

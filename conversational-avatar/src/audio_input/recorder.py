@@ -199,15 +199,30 @@ class AudioRecorder:
 
         logger.info(f"Audio saved to {output_path}")
 
-    def play_audio(self, audio_data: np.ndarray):
-        """Play audio through speakers.
+    def play_audio(self, audio_data: np.ndarray, timeout: float = 60.0):
+        """Play audio through speakers with timeout protection.
 
         Args:
             audio_data: Audio data to play
+            timeout: Maximum playback time in seconds (default: 60s)
         """
         try:
             sd.play(audio_data, self.sample_rate)
-            sd.wait()
+            # Calculate expected duration
+            expected_duration = len(audio_data) / self.sample_rate
+            # Use the shorter of expected duration + 1s buffer or the timeout
+            wait_time = min(expected_duration + 1.0, timeout)
+
+            # Wait with timeout - sd.wait() doesn't have timeout so we poll
+            import time as time_module
+            start = time_module.time()
+            while sd.get_stream() and sd.get_stream().active:
+                if time_module.time() - start > wait_time:
+                    sd.stop()
+                    logger.warning(f"Audio playback timed out after {wait_time:.1f}s")
+                    return
+                time_module.sleep(0.1)
+
             logger.info("Audio playback complete")
         except Exception as e:
             logger.error(f"Failed to play audio: {e}")
