@@ -5,12 +5,28 @@ Implements entropy production (Π_q) measurement for monitoring
 system criticality. Auto-tuning of λ_diss is DISABLED by default -
 measurement and logging first.
 
-Π_q ≈ Σ_spikes (V_m - V_reset)²/τ_m + λ_J trace(J^T J) + I(spike;input)
+PRECISE FORMULA (from TGSFN spec):
+
+Π_q ≈ Σ_i (V_m^i - V_reset)² / (τ_m^i · σ_i²) + λ_J ||J_θ||_F²
+
+Where:
+- First term: Leak power (E/I balance deviation)
+  - Minimizes fluctuation residual around perfect E/I balance
+  - At criticality, this is the state of MINIMAL energy dissipation
+- Second term: Jacobian Frobenius norm regularization
+  - Controls weight magnitudes
+  - ||J_θ||_F² = trace(J^T J)
+
+The coupling ensures computational optimum (criticality) equals
+minimal energy dissipation state.
+
+Target: g → 1 (effective gain ≈ 1, critical branching)
+Avalanche exponent: α = 1.63 ± 0.04 (finite-size corrected 3/2)
 """
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, List, Optional, Tuple, NamedTuple
+from typing import Dict, List, Optional, Tuple, NamedTuple, Union
 from dataclasses import dataclass
 import logging
 import math
@@ -73,19 +89,40 @@ class EntropyProductionMonitor(nn.Module):
         membrane_potentials: torch.Tensor,
         spikes: torch.Tensor,
         v_reset: Optional[float] = None,
-        tau_m: Optional[float] = None
+        tau_m: Optional[Union[float, torch.Tensor]] = None,
+        sigma: Optional[Union[float, torch.Tensor]] = None
     ) -> torch.Tensor:
         """
-        Compute spike dissipation term.
+        Compute spike dissipation term (PRECISE FORMULA).
 
-        Σ_spikes (V_m - V_reset)² / τ_m
+        Π_leak = Σ_i (V_m^i - V_reset)² / (τ_m^i · σ_i²)
 
-        Only count dissipation at spike times.
+        This is the leak power term that minimizes fluctuation residual
+        around perfect E/I balance. At criticality, this equals the
+        state of minimal energy dissipation.
+
+        Args:
+            membrane_potentials: V_m for each neuron
+            spikes: Binary spike mask (1 where spike occurred)
+            v_reset: Reset potential (scalar or per-neuron)
+            tau_m: Membrane time constant (scalar or per-neuron)
+            sigma: Noise variance (scalar or per-neuron)
+
+        Returns:
+            Leak power term of Π_q
         """
         if v_reset is None:
             v_reset = self.config.v_reset
         if tau_m is None:
             tau_m = self.config.tau_membrane
+        if sigma is None:
+            sigma = 1.0  # Default unit variance
+
+        # Ensure tensors
+        if isinstance(tau_m, (int, float)):
+            tau_m = torch.tensor(tau_m, device=membrane_potentials.device)
+        if isinstance(sigma, (int, float)):
+            sigma = torch.tensor(sigma, device=membrane_potentials.device)
 
         # Deviation from reset at spike times
         deviation = membrane_potentials - v_reset
@@ -93,8 +130,10 @@ class EntropyProductionMonitor(nn.Module):
         # Only count where spikes occurred
         spike_deviation = deviation * spikes
 
-        # Dissipation
-        dissipation = torch.sum(spike_deviation ** 2) / tau_m
+        # PRECISE FORMULA: (V_m - V_reset)² / (τ_m · σ²)
+        # This is proportional to required leak power
+        denominator = tau_m * (sigma ** 2) + 1e-10  # Avoid division by zero
+        dissipation = torch.sum(spike_deviation ** 2 / denominator)
 
         return dissipation
 

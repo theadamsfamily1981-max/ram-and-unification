@@ -14,23 +14,30 @@ Hard Spec (fully implemented):
       "Reject update if F_int rises too much"
 - Online & Sleep training loops
 
+TGSFN Substrate (V. Edge of Chaos):
+- Criticality control via Π_q minimization (g → 1)
+- Antifragile loop with Jacobian spectral norm monitoring
+- Hardware mandates: 16-bit fixed point, manifold recentering, K-FAC fidelity
+- Fast Learnable Time Warping (FLTW) with O(N·T) complexity
+- Avalanche exponent validation: α = 1.63 ± 0.04
+
 Experimental/Guarded:
 - Hyperbolic identity manifold (thresholds tunable)
 - DAU: Very conservative (tiny step, identity/value bans, logging)
-- Π_q-based criticality: Measurement + logging (auto-tuning disabled)
+- Π_q auto-tuning: Disabled by default (measurement first)
 
 Example usage:
 
     from hrrl_agent import create_agent, HRRLAgent, HRRLConfig
+    from hrrl_agent import create_tgsfn_substrate, TGSFNConfig
 
-    # Quick creation with defaults
+    # Quick agent creation
     agent = create_agent(obs_dim=64, action_dim=8)
 
-    # Full control
-    config = HRRLConfig()
-    config.l1.num_needs = 8
-    config.identity.enabled = True
-    agent = HRRLAgent(config, obs_dim=64, action_dim=8)
+    # TGSFN substrate
+    substrate = create_tgsfn_substrate(
+        input_dim=64, hidden_dims=[256, 128], output_dim=32
+    )
 
     # Use agent
     action, info = agent(observation)
@@ -129,7 +136,49 @@ from .agent import (
     create_agent
 )
 
-__version__ = "0.1.0"
+# Criticality Control (Edge of Chaos)
+from .criticality import (
+    CriticalityController,
+    CriticalityConfig,
+    CriticalityState,
+    CriticalityRegime,
+    CriticalInitializer,
+    EffectiveGainEstimator,
+    AvalancheAnalyzer,
+    EIBalanceMonitor
+)
+
+# Antifragile Loop
+from .antifragile import (
+    AntifragileLoop,
+    AntifragileConfig,
+    AntifragileState,
+    StabilityStatus,
+    JacobianMonitor,
+    AxiomCorrector
+)
+
+# Hardware Mandates
+from .hardware import (
+    FixedPoint16,
+    FixedPointHyperbolic,
+    ManifoldRecenterer,
+    Orthonormalizer,
+    KFACTracker,
+    FastLearnableTimeWarping
+)
+
+# TGSFN Substrate
+from .tgsfn import (
+    TGSFNConfig,
+    TGSFNState,
+    TGSFNLoss,
+    TGSFNLayer,
+    TGSFNSubstrate,
+    create_tgsfn_substrate
+)
+
+__version__ = "0.2.0"
 __author__ = "HRRL Framework"
 
 __all__ = [
@@ -201,4 +250,38 @@ __all__ = [
     "HRRLAgent",
     "PolicyNetwork",
     "create_agent",
+
+    # Criticality (Edge of Chaos)
+    "CriticalityController",
+    "CriticalityConfig",
+    "CriticalityState",
+    "CriticalityRegime",
+    "CriticalInitializer",
+    "EffectiveGainEstimator",
+    "AvalancheAnalyzer",
+    "EIBalanceMonitor",
+
+    # Antifragile
+    "AntifragileLoop",
+    "AntifragileConfig",
+    "AntifragileState",
+    "StabilityStatus",
+    "JacobianMonitor",
+    "AxiomCorrector",
+
+    # Hardware
+    "FixedPoint16",
+    "FixedPointHyperbolic",
+    "ManifoldRecenterer",
+    "Orthonormalizer",
+    "KFACTracker",
+    "FastLearnableTimeWarping",
+
+    # TGSFN
+    "TGSFNConfig",
+    "TGSFNState",
+    "TGSFNLoss",
+    "TGSFNLayer",
+    "TGSFNSubstrate",
+    "create_tgsfn_substrate",
 ]
