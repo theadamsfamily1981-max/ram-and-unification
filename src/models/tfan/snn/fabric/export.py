@@ -425,10 +425,149 @@ class FPGAExporter:
         return "\n".join(lines)
 
 
+def generate_hls_structs(
+    fabric: SNNFabric,
+    output_path: str | Path,
+    num_bits: int = 16,
+) -> Path:
+    """Generate C/C++ header with struct definitions for HLS/SYCL.
+
+    Creates type definitions that match the binary export format,
+    allowing direct memory mapping in HLS/SYCL kernels.
+
+    Args:
+        fabric: SNNFabric instance
+        output_path: Path to output header file
+        num_bits: Weight quantization bits
+
+    Returns:
+        Path to generated header file
+    """
+    output_path = Path(output_path)
+
+    # Determine weight type based on bits
+    weight_type = "int8_t" if num_bits <= 8 else "int16_t"
+
+    total_neurons = sum(pop.N for pop in fabric.populations.values())
+    total_synapses = sum(proj.synapse.nnz for proj in fabric.projections)
+
+    header = f'''// =============================================================================
+// hls_structs.h
+//
+// Auto-generated HLS/SYCL struct definitions for SNN fabric deployment
+// Fabric: {fabric.name}
+// Generated for {num_bits}-bit quantization
+//
+// WARNING: This file is auto-generated. Do not edit manually.
+// =============================================================================
+
+#ifndef HLS_STRUCTS_H
+#define HLS_STRUCTS_H
+
+#include <stdint.h>
+
+// =============================================================================
+// Configuration Constants
+// =============================================================================
+
+#define FABRIC_NAME "{fabric.name}"
+#define TIME_STEPS {fabric.time_steps}
+#define DT_US {int(fabric.dt * 1e6)}
+
+#define NUM_POPULATIONS {len(fabric.populations)}
+#define NUM_PROJECTIONS {len(fabric.projections)}
+#define TOTAL_NEURONS {total_neurons}
+#define TOTAL_SYNAPSES {total_synapses}
+#define WEIGHT_BITS {num_bits}
+
+// Population sizes
+'''
+
+    # Add population size constants
+    for name, pop in fabric.populations.items():
+        const_name = f"N_{name.upper()}"
+        header += f"#define {const_name} {pop.N}\n"
+
+    header += f'''
+// =============================================================================
+// Type Definitions
+// =============================================================================
+
+typedef {weight_type} weight_q_t;
+typedef int16_t  fp_v_t;     // Membrane potential (Q6.10)
+typedef int32_t  fp_i_t;     // Input current accumulator
+typedef uint16_t fp_param_t; // Neuron parameters (Q1.14)
+
+typedef struct {{
+    uint16_t neuron_idx;
+    uint8_t  spike;
+    uint8_t  _pad;
+}} spike_event_t;
+
+// =============================================================================
+// Projection Header (at start of proj_*.bin)
+// =============================================================================
+
+typedef struct __attribute__((packed)) {{
+    int32_t N_pre;
+    int32_t N_post;
+    int32_t k;
+    int32_t r;
+    int32_t nnz;
+}} proj_header_t;
+
+// =============================================================================
+// Neuron State
+// =============================================================================
+
+typedef struct __attribute__((packed)) {{
+    fp_v_t v;
+    fp_v_t v_th;
+    fp_param_t alpha;
+    uint8_t refractory;
+    uint8_t flags;
+}} neuron_state_t;
+
+// =============================================================================
+// Fixed-Point Conversion
+// =============================================================================
+
+#define FP_V_FRAC_BITS 10
+#define FP_PARAM_FRAC_BITS 14
+#define FLOAT_TO_FP_V(x)     ((fp_v_t)((x) * (1 << FP_V_FRAC_BITS)))
+#define FLOAT_TO_FP_PARAM(x) ((fp_param_t)((x) * (1 << FP_PARAM_FRAC_BITS)))
+
+// =============================================================================
+// Memory Size Macros
+// =============================================================================
+
+#define INDPTR_SIZE(n_post)   (((n_post) + 1) * sizeof(int32_t))
+#define INDICES_SIZE(nnz)     ((nnz) * sizeof(int32_t))
+#define VALUES_SIZE(nnz)      ((nnz) * sizeof(weight_q_t))
+
+'''
+
+    # Add projection-specific constants
+    for proj in fabric.projections:
+        name_upper = proj.name.upper().replace("→", "_TO_").replace(" ", "_")
+        header += f"// Projection: {proj.name}\n"
+        header += f"#define PROJ_{name_upper}_N_PRE {proj.params.N_pre}\n"
+        header += f"#define PROJ_{name_upper}_N_POST {proj.params.N_post}\n"
+        header += f"#define PROJ_{name_upper}_NNZ {proj.synapse.nnz}\n\n"
+
+    header += "#endif // HLS_STRUCTS_H\n"
+
+    with open(output_path, "w") as f:
+        f.write(header)
+
+    return output_path
+
+
 __all__ = [
     "quantize_weights",
     "export_fabric_to_dict",
     "export_fabric_to_binary",
     "load_fabric_from_export",
+    "generate_hls_structs",
     "FPGAExporter",
 ]
