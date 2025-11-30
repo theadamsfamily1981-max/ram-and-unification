@@ -9,6 +9,7 @@
 //   spike = (v >= v_th) ? 1 : 0
 //
 // Processes neurons sequentially (time-multiplexed) and outputs packed spikes.
+// After reading I[n], clears it to zero for the next step.
 // =============================================================================
 
 `timescale 1ns / 1ps
@@ -31,8 +32,10 @@ module lif_population #(
     input  wire [15:0]  i_alpha,        // Membrane decay (e.g., 0.95 → ~15564)
     input  wire [15:0]  i_v_th,         // Threshold (e.g., 1.0 → 16384)
 
-    // Input current memory interface (read)
+    // Input current memory interface (read/write - clears after read)
     output reg  [ADDRW-1:0]  o_curr_addr,
+    output reg               o_curr_we,      // Write enable for clearing
+    output reg  [31:0]       o_curr_din,     // Write data (zeros for clear)
     input  wire [31:0]       i_curr_data,    // I[n]
 
     // Membrane potential memory interface (read/write)
@@ -50,17 +53,18 @@ module lif_population #(
     // =========================================================================
     // State Machine
     // =========================================================================
-    localparam [2:0] S_IDLE      = 3'd0;
-    localparam [2:0] S_ISSUE_RD  = 3'd1;  // Issue BRAM reads for v[n], I[n]
-    localparam [2:0] S_WAIT_RD   = 3'd2;  // Wait for BRAM latency
-    localparam [2:0] S_COMPUTE   = 3'd3;  // Compute LIF update
-    localparam [2:0] S_WRITE_V   = 3'd4;  // Write back v[n]
-    localparam [2:0] S_PACK      = 3'd5;  // Accumulate spike into pack buffer
-    localparam [2:0] S_EMIT      = 3'd6;  // Emit packed spike word
-    localparam [2:0] S_DONE      = 3'd7;
+    localparam [3:0] S_IDLE      = 4'd0;
+    localparam [3:0] S_ISSUE_RD  = 4'd1;  // Issue BRAM reads for v[n], I[n]
+    localparam [3:0] S_WAIT_RD   = 4'd2;  // Wait for BRAM latency
+    localparam [3:0] S_COMPUTE   = 4'd3;  // Compute LIF update
+    localparam [3:0] S_WRITE_V   = 4'd4;  // Write back v[n]
+    localparam [3:0] S_CLEAR_I   = 4'd5;  // Clear I[n] = 0
+    localparam [3:0] S_PACK      = 4'd6;  // Accumulate spike into pack buffer
+    localparam [3:0] S_EMIT      = 4'd7;  // Emit packed spike word
+    localparam [3:0] S_DONE      = 4'd8;
 
-    reg [2:0] state;
-    reg [2:0] state_next;
+    reg [3:0] state;
+    reg [3:0] state_next;
 
     // Working registers
     reg [ADDRW-1:0]       neuron_idx;       // Current neuron index
@@ -135,6 +139,10 @@ module lif_population #(
             end
 
             S_WRITE_V: begin
+                state_next = S_CLEAR_I;
+            end
+
+            S_CLEAR_I: begin
                 state_next = S_PACK;
             end
 
@@ -176,6 +184,8 @@ module lif_population #(
         if (rst) begin
             o_done        <= 1'b0;
             o_curr_addr   <= {ADDRW{1'b0}};
+            o_curr_we     <= 1'b0;
+            o_curr_din    <= 32'd0;
             o_v_addr      <= {ADDRW{1'b0}};
             o_v_we        <= 1'b0;
             o_v_din       <= 32'd0;
@@ -193,6 +203,7 @@ module lif_population #(
                     o_done        <= 1'b0;
                     o_spike_valid <= 1'b0;
                     o_v_we        <= 1'b0;
+                    o_curr_we     <= 1'b0;
 
                     if (i_start) begin
                         neuron_idx <= {ADDRW{1'b0}};
@@ -206,6 +217,7 @@ module lif_population #(
                     o_v_addr    <= neuron_idx;
                     o_curr_addr <= neuron_idx;
                     o_v_we      <= 1'b0;
+                    o_curr_we   <= 1'b0;
                     wait_cnt    <= BRAM_DELAY - 1;
                 end
 
@@ -229,8 +241,17 @@ module lif_population #(
                     o_v_we   <= 1'b1;
                 end
 
+                S_CLEAR_I: begin
+                    // Clear I[n] = 0 after reading
+                    o_v_we      <= 1'b0;
+                    o_curr_addr <= neuron_idx;
+                    o_curr_din  <= 32'd0;
+                    o_curr_we   <= 1'b1;
+                end
+
                 S_PACK: begin
-                    o_v_we <= 1'b0;
+                    o_v_we    <= 1'b0;
+                    o_curr_we <= 1'b0;
 
                     // Add spike to pack buffer
                     spike_pack[pack_idx] <= spike_out;
@@ -265,6 +286,7 @@ module lif_population #(
                     o_done        <= 1'b1;
                     o_spike_valid <= 1'b0;
                     o_v_we        <= 1'b0;
+                    o_curr_we     <= 1'b0;
 
                     if (!i_start) begin
                         o_done <= 1'b0;
@@ -273,6 +295,7 @@ module lif_population #(
 
                 default: begin
                     o_v_we        <= 1'b0;
+                    o_curr_we     <= 1'b0;
                     o_spike_valid <= 1'b0;
                 end
             endcase
