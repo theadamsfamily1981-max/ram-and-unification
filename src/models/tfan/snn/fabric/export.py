@@ -563,6 +563,248 @@ typedef struct __attribute__((packed)) {{
     return output_path
 
 
+# =============================================================================
+# Kitten FPGA Export (matches HLS kernel interface)
+# =============================================================================
+
+def export_kitten_fabric(
+    fabric_data: "KittenFabricData",
+    out_dir: str | Path,
+) -> Dict[str, Path]:
+    """Export Kitten fabric data to binary files for FPGA deployment.
+
+    Creates files matching the FABRIC_MAPPING.md specification:
+    - neurons.bin: Packed neuron records (v, v_th, flags) - 6 bytes each
+    - weights.bin: CSR data (row_ptr, col_idx, weights) for all projections
+    - fabric_topology.json: Metadata with offsets and sizes
+
+    Args:
+        fabric_data: KittenFabricData from from_model.py
+        out_dir: Output directory
+
+    Returns:
+        Dictionary mapping file names to paths
+    """
+    import struct
+    from .from_model import KittenFabricData
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    num_neurons = fabric_data.num_neurons
+    files = {}
+
+    # =========================================================================
+    # neurons.bin - Packed neuron state records
+    # Layout: [v: int16, v_th: int16, flags: uint16] = 6 bytes per neuron
+    # =========================================================================
+    neuron_record_size = 6
+    v_offset = 0
+    v_th_offset = 2
+    flags_offset = 4
+
+    neurons_bytes = bytearray(neuron_record_size * num_neurons)
+
+    for n in range(num_neurons):
+        base = n * neuron_record_size
+        # v (Q5.10)
+        struct.pack_into("<h", neurons_bytes, base + v_offset, int(fabric_data.v_init_fp[n]))
+        # v_th (Q5.10)
+        struct.pack_into("<h", neurons_bytes, base + v_th_offset, int(fabric_data.v_th_fp[n]))
+        # flags (initially 0)
+        struct.pack_into("<H", neurons_bytes, base + flags_offset, 0)
+
+    neurons_path = out_dir / "neurons.bin"
+    neurons_path.write_bytes(neurons_bytes)
+    files["neurons"] = neurons_path
+
+    # =========================================================================
+    # weights.bin - CSR data for all projections
+    # Layout: [row_ptr: int32[N+1], col_idx: int32[nnz], weights: int8[nnz]]
+    # =========================================================================
+    weights_bytes = bytearray()
+    projection_metadata = []
+
+    for proj in fabric_data.projections:
+        proj_meta = {
+            "name": proj["name"],
+            "pre_start": proj["pre_start"],
+            "pre_end": proj["pre_end"],
+            "post_start": proj["post_start"],
+            "post_end": proj["post_end"],
+            "nnz": proj["nnz"],
+        }
+
+        # Row pointer offset
+        proj_meta["row_ptr_offset_bytes"] = len(weights_bytes)
+        proj_meta["row_ptr_length"] = len(proj["row_ptr"])
+        for v in proj["row_ptr"]:
+            weights_bytes += struct.pack("<I", int(v))
+
+        # Column indices offset
+        proj_meta["col_idx_offset_bytes"] = len(weights_bytes)
+        for c in proj["col_idx"]:
+            weights_bytes += struct.pack("<I", int(c))
+
+        # Weights offset
+        proj_meta["weights_offset_bytes"] = len(weights_bytes)
+        for w in proj["weights_fp"]:
+            # 8-bit weights
+            weights_bytes += struct.pack("<b", int(w))
+
+        projection_metadata.append(proj_meta)
+
+    weights_path = out_dir / "weights.bin"
+    weights_path.write_bytes(weights_bytes)
+    files["weights"] = weights_path
+
+    # =========================================================================
+    # fabric_topology.json - Metadata
+    # =========================================================================
+    topology = {
+        "version": 1,
+        "fabric_name": fabric_data.name,
+        "endianness": "little",
+
+        "total_neurons": num_neurons,
+        "total_synapses": fabric_data.total_synapses,
+
+        "fixed_point": {
+            "v_bits": 16,
+            "v_frac_bits": 10,
+            "w_bits": 8,
+            "w_frac_bits": 6,
+            "param_bits": 16,
+            "param_frac_bits": 14,
+        },
+
+        "neuron_state_layout": {
+            "record_size_bytes": neuron_record_size,
+            "record_count": num_neurons,
+            "v_offset_bytes": v_offset,
+            "v_stride_bytes": neuron_record_size,
+            "threshold_offset_bytes": v_th_offset,
+            "threshold_stride_bytes": neuron_record_size,
+            "flags_offset_bytes": flags_offset,
+            "flags_stride_bytes": neuron_record_size,
+        },
+
+        "projections": projection_metadata,
+    }
+
+    topology_path = out_dir / "fabric_topology.json"
+    with open(topology_path, "w") as f:
+        json.dump(topology, f, indent=2)
+    files["topology"] = topology_path
+
+    print(f"[Kitten export] Exported to {out_dir}/")
+    print(f"  neurons.bin:          {len(neurons_bytes):,} bytes ({num_neurons} neurons)")
+    print(f"  weights.bin:          {len(weights_bytes):,} bytes ({fabric_data.total_synapses} synapses)")
+    print(f"  fabric_topology.json: metadata")
+
+    return files
+
+
+def export_kitten_from_snns_fabric(
+    fabric: "SNNFabric",
+    out_dir: str | Path,
+    quantize_8bit: bool = True,
+) -> Dict[str, Path]:
+    """Export an existing SNNFabric to Kitten binary format.
+
+    This is a convenience wrapper that converts SNNFabric to KittenFabricData
+    and then exports.
+
+    Args:
+        fabric: SNNFabric instance
+        out_dir: Output directory
+        quantize_8bit: Use 8-bit weight quantization
+
+    Returns:
+        Dictionary mapping file names to paths
+    """
+    import torch
+    from .from_model import (
+        KittenFabricData,
+        quantize_q5_10,
+        quantize_q1_14,
+        quantize_q1_6,
+        quantize_q1_14_weights,
+    )
+
+    # Calculate total neurons
+    total_neurons = sum(pop.N for pop in fabric.populations.values())
+
+    # Create neuron parameter arrays
+    # Default values - in real use these would come from population params
+    v_init = torch.zeros(total_neurons)
+    v_th = torch.ones(total_neurons) * 0.5
+    alpha = torch.ones(total_neurons) * 0.9
+
+    # Apply per-population parameters if available
+    offset = 0
+    for name, pop in fabric.populations.items():
+        N = pop.N
+        if hasattr(pop, "params"):
+            v_th[offset:offset + N] = pop.params.v_th
+            alpha[offset:offset + N] = pop.params.alpha
+        offset += N
+
+    # Quantize
+    v_init_fp = quantize_q5_10(v_init).numpy()
+    v_th_fp = quantize_q5_10(v_th).numpy()
+    alpha_fp = quantize_q1_14(alpha).numpy()
+
+    fabric_data = KittenFabricData(
+        name=fabric.name,
+        num_neurons=total_neurons,
+        v_init_fp=v_init_fp,
+        v_th_fp=v_th_fp,
+        alpha_fp=alpha_fp,
+    )
+
+    # Build population ID mappings
+    pop_offsets = {}
+    offset = 0
+    for name, pop in fabric.populations.items():
+        pop_offsets[name] = offset
+        offset += pop.N
+
+    # Export projections
+    for proj in fabric.projections:
+        pre_offset = pop_offsets[proj.pre]
+        post_offset = pop_offsets[proj.post]
+        pre_N = fabric.populations[proj.pre].N
+        post_N = fabric.populations[proj.post].N
+
+        # Get CSR data from projection synapse
+        if hasattr(proj, "synapse"):
+            syn = proj.synapse
+            row_ptr = syn.indptr.detach().cpu().numpy().astype(np.int32)
+            col_idx = syn.indices.detach().cpu().numpy().astype(np.int32)
+
+            # Get effective weights
+            values = syn.effective_weight_sparse()
+
+            if quantize_8bit:
+                w_fp = quantize_q1_6(values).numpy()
+            else:
+                w_fp = quantize_q1_14_weights(values).numpy()
+
+            fabric_data.add_projection(
+                name=proj.name,
+                pre_start=pre_offset,
+                pre_end=pre_offset + pre_N,
+                post_start=post_offset,
+                post_end=post_offset + post_N,
+                row_ptr=row_ptr,
+                col_idx=col_idx,
+                weights_fp=w_fp,
+            )
+
+    return export_kitten_fabric(fabric_data, out_dir)
+
+
 __all__ = [
     "quantize_weights",
     "export_fabric_to_dict",
@@ -570,4 +812,7 @@ __all__ = [
     "load_fabric_from_export",
     "generate_hls_structs",
     "FPGAExporter",
+    # Kitten-specific
+    "export_kitten_fabric",
+    "export_kitten_from_snns_fabric",
 ]

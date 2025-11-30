@@ -14,6 +14,17 @@ from .export import (
     load_fabric_from_export,
     FPGAExporter,
     quantize_weights,
+    export_kitten_fabric,
+    export_kitten_from_snns_fabric,
+)
+from .from_model import (
+    KittenFabricData,
+    build_kitten_fabric_from_model,
+    build_kitten_fabric_from_state_dict,
+    quantize_q5_10,
+    quantize_q1_14,
+    quantize_q1_6,
+    dense_to_csr,
 )
 
 __all__ = [
@@ -27,4 +38,14 @@ __all__ = [
     "load_fabric_from_export",
     "FPGAExporter",
     "quantize_weights",
+    # Kitten FPGA export
+    "export_kitten_fabric",
+    "export_kitten_from_snns_fabric",
+    "KittenFabricData",
+    "build_kitten_fabric_from_model",
+    "build_kitten_fabric_from_state_dict",
+    "quantize_q5_10",
+    "quantize_q1_14",
+    "quantize_q1_6",
+    "dense_to_csr",
 ]
