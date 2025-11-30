@@ -283,6 +283,109 @@ progressbar progress {
     color: rgba(0, 255, 200, 0.8);
     margin-bottom: 12px;
 }
+
+/* === Layer 2: Appraisal Section === */
+.appraisal-section {
+    background: linear-gradient(135deg, rgba(35, 20, 45, 0.95) 0%, rgba(25, 15, 35, 0.98) 100%);
+    border: 1px solid rgba(200, 100, 255, 0.25);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.appraisal-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(200, 100, 255, 0.8);
+    margin-bottom: 12px;
+}
+
+.emotion-label {
+    font-size: 32px;
+    font-weight: 700;
+    font-family: "JetBrains Mono", monospace;
+    color: #cc66ff;
+    text-shadow: 0 0 20px rgba(200, 100, 255, 0.5);
+    text-transform: capitalize;
+}
+
+/* === Layer 3: Uncertainty Section === */
+.uncertainty-section {
+    background: linear-gradient(135deg, rgba(20, 35, 45, 0.95) 0%, rgba(15, 25, 35, 0.98) 100%);
+    border: 1px solid rgba(100, 200, 255, 0.25);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.uncertainty-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(100, 200, 255, 0.8);
+    margin-bottom: 12px;
+}
+
+.explore-mode {
+    color: #00ddff !important;
+    text-shadow: 0 0 12px rgba(0, 220, 255, 0.6);
+}
+
+.exploit-mode {
+    color: #ffaa00 !important;
+    text-shadow: 0 0 12px rgba(255, 170, 0, 0.6);
+}
+
+.defer-active {
+    color: #ff6644 !important;
+    text-shadow: 0 0 12px rgba(255, 102, 68, 0.6);
+}
+
+/* === TGSFN: Antifragility Section === */
+.antifragility-section {
+    background: linear-gradient(135deg, rgba(40, 25, 20, 0.95) 0%, rgba(30, 18, 15, 0.98) 100%);
+    border: 1px solid rgba(255, 150, 50, 0.25);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.antifragility-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(255, 180, 100, 0.8);
+    margin-bottom: 12px;
+}
+
+.antifragile-positive {
+    color: #00ff88 !important;
+    text-shadow: 0 0 12px rgba(0, 255, 136, 0.6);
+}
+
+.antifragile-neutral {
+    color: #88ddff !important;
+}
+
+.antifragile-fragile {
+    color: #ff4466 !important;
+    text-shadow: 0 0 12px rgba(255, 68, 102, 0.6);
+}
+
+.dau-active {
+    border-color: rgba(255, 100, 100, 0.8) !important;
+    box-shadow: 0 0 25px rgba(255, 100, 100, 0.4);
+    animation: dau-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dau-pulse {
+    0%, 100% { box-shadow: 0 0 25px rgba(255, 100, 100, 0.4); }
+    50% { box-shadow: 0 0 35px rgba(255, 100, 100, 0.6); }
+}
 """
 
 
@@ -846,6 +949,194 @@ class TFANWindow(Adw.ApplicationWindow):
         self.nce_list = NCEActionsList()
         box.append(self.nce_list)
 
+        box.append(Gtk.Separator())
+
+        # === Layer 2: Cognitive Appraisal (EMA/CoRE) ===
+        appraisal_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        appraisal_section.add_css_class("appraisal-section")
+
+        appraisal_title = Gtk.Label(label="LAYER 2: COGNITIVE APPRAISAL")
+        appraisal_title.add_css_class("appraisal-section-title")
+        appraisal_title.set_halign(Gtk.Align.START)
+        appraisal_section.append(appraisal_title)
+
+        # Emotion label and confidence
+        emotion_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        emotion_box.set_margin_bottom(8)
+
+        self.emotion_label = Gtk.Label(label="neutral")
+        self.emotion_label.add_css_class("emotion-label")
+        emotion_box.append(self.emotion_label)
+
+        emotion_conf_card = MetricCard("CONFIDENCE", "—", None, "brain-metric-card", "brain-value")
+        self.brain_metric_cards["emotion_confidence"] = emotion_conf_card.value_label
+        emotion_box.append(emotion_conf_card)
+
+        appraisal_section.append(emotion_box)
+
+        # Appraisal dimension bars
+        self.brain_bars["appraisal_pleasantness"] = BrainMetricBar(
+            "Pleasantness", -1.0, 1.0, "{:+.2f}"
+        )
+        appraisal_section.append(self.brain_bars["appraisal_pleasantness"])
+
+        self.brain_bars["appraisal_goal_congruence"] = BrainMetricBar(
+            "Goal Congruence", -1.0, 1.0, "{:+.2f}"
+        )
+        appraisal_section.append(self.brain_bars["appraisal_goal_congruence"])
+
+        self.brain_bars["appraisal_control"] = BrainMetricBar(
+            "Control", -1.0, 1.0, "{:+.2f}"
+        )
+        appraisal_section.append(self.brain_bars["appraisal_control"])
+
+        self.brain_bars["appraisal_certainty"] = BrainMetricBar(
+            "Certainty", -1.0, 1.0, "{:+.2f}"
+        )
+        appraisal_section.append(self.brain_bars["appraisal_certainty"])
+
+        self.brain_bars["appraisal_coping_potential"] = BrainMetricBar(
+            "Coping Potential", -1.0, 1.0, "{:+.2f}"
+        )
+        appraisal_section.append(self.brain_bars["appraisal_coping_potential"])
+
+        # Explanation text
+        self.appraisal_explanation = Gtk.Label(label="")
+        self.appraisal_explanation.set_halign(Gtk.Align.START)
+        self.appraisal_explanation.set_wrap(True)
+        self.appraisal_explanation.set_opacity(0.7)
+        self.appraisal_explanation.set_margin_top(8)
+        appraisal_section.append(self.appraisal_explanation)
+
+        box.append(appraisal_section)
+
+        box.append(Gtk.Separator())
+
+        # === Layer 3: Uncertainty Decomposition ===
+        uncertainty_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        uncertainty_section.add_css_class("uncertainty-section")
+        self.uncertainty_section = uncertainty_section
+
+        uncertainty_title = Gtk.Label(label="LAYER 3: UNCERTAINTY DECOMPOSITION")
+        uncertainty_title.add_css_class("uncertainty-section-title")
+        uncertainty_title.set_halign(Gtk.Align.START)
+        uncertainty_section.append(uncertainty_title)
+
+        # Explore vs Exploit indicator
+        policy_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        policy_box.set_margin_bottom(8)
+
+        explore_card = MetricCard("EXPLORE ↔ EXPLOIT", "—", None, "brain-metric-card", "brain-value")
+        self.brain_metric_cards["explore_vs_exploit"] = explore_card.value_label
+        self.explore_card = explore_card
+        policy_box.append(explore_card)
+
+        defer_card = MetricCard("DEFER", "No", None, "brain-metric-card", "brain-value")
+        self.brain_metric_cards["should_defer"] = defer_card.value_label
+        self.defer_card = defer_card
+        policy_box.append(defer_card)
+
+        uncertainty_section.append(policy_box)
+
+        # Uncertainty bars
+        self.brain_bars["uncertainty_total"] = BrainMetricBar(
+            "Total Uncertainty", 0.0, 1.0, "{:.3f}"
+        )
+        uncertainty_section.append(self.brain_bars["uncertainty_total"])
+
+        self.brain_bars["uncertainty_aleatoric"] = BrainMetricBar(
+            "Aleatoric (irreducible)", 0.0, 1.0, "{:.3f}"
+        )
+        uncertainty_section.append(self.brain_bars["uncertainty_aleatoric"])
+
+        self.brain_bars["uncertainty_epistemic"] = BrainMetricBar(
+            "Epistemic (reducible)", 0.0, 1.0, "{:.3f}"
+        )
+        uncertainty_section.append(self.brain_bars["uncertainty_epistemic"])
+
+        self.brain_bars["attention_gain"] = BrainMetricBar(
+            "LC Attention Gain", 1.0, 2.5, "{:.2f}"
+        )
+        uncertainty_section.append(self.brain_bars["attention_gain"])
+
+        # Defer reason
+        self.defer_reason_label = Gtk.Label(label="")
+        self.defer_reason_label.set_halign(Gtk.Align.START)
+        self.defer_reason_label.set_wrap(True)
+        self.defer_reason_label.set_opacity(0.7)
+        self.defer_reason_label.set_margin_top(8)
+        uncertainty_section.append(self.defer_reason_label)
+
+        box.append(uncertainty_section)
+
+        box.append(Gtk.Separator())
+
+        # === TGSFN: Antifragility Metrics ===
+        antifragility_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        antifragility_section.add_css_class("antifragility-section")
+        self.antifragility_section = antifragility_section
+
+        antifragility_title = Gtk.Label(label="TGSFN: ANTIFRAGILITY MONITOR")
+        antifragility_title.add_css_class("antifragility-section-title")
+        antifragility_title.set_halign(Gtk.Align.START)
+        antifragility_section.append(antifragility_title)
+
+        # Antifragility index and DAU status
+        af_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        af_box.set_margin_bottom(8)
+
+        af_index_card = MetricCard("ANTIFRAGILITY", "—", None, "brain-metric-card", "brain-value")
+        self.brain_metric_cards["antifragility_index"] = af_index_card.value_label
+        self.af_index_card = af_index_card
+        af_box.append(af_index_card)
+
+        stability_card = MetricCard("STABILITY", "—", None, "brain-metric-card", "brain-value")
+        self.brain_metric_cards["stability_margin"] = stability_card.value_label
+        af_box.append(stability_card)
+
+        dau_card = MetricCard("DAU", "—", None, "brain-metric-card", "brain-value")
+        self.brain_metric_cards["dau_active"] = dau_card.value_label
+        self.dau_card = dau_card
+        af_box.append(dau_card)
+
+        antifragility_section.append(af_box)
+
+        # Antifragility metrics bars
+        self.brain_bars["pi_q"] = BrainMetricBar(
+            "Π_q — Entropy Production Rate", 0.0, 1.0, "{:.4f}"
+        )
+        antifragility_section.append(self.brain_bars["pi_q"])
+
+        self.brain_bars["convexity"] = BrainMetricBar(
+            "Convexity (payoff curvature)", -1.0, 1.0, "{:+.3f}"
+        )
+        antifragility_section.append(self.brain_bars["convexity"])
+
+        self.brain_bars["jacobian_spectral_norm"] = BrainMetricBar(
+            "Jacobian Spectral Norm", 0.0, 10.0, "{:.3f}"
+        )
+        antifragility_section.append(self.brain_bars["jacobian_spectral_norm"])
+
+        self.brain_bars["lyapunov_proxy"] = BrainMetricBar(
+            "Lyapunov Exponent Proxy", -1.0, 1.0, "{:+.4f}"
+        )
+        antifragility_section.append(self.brain_bars["lyapunov_proxy"])
+
+        self.brain_bars["fragility_exposure"] = BrainMetricBar(
+            "Fragility Exposure (downside risk)", 0.0, 1.0, "{:.3f}"
+        )
+        antifragility_section.append(self.brain_bars["fragility_exposure"])
+
+        # DAU trigger reason
+        self.dau_reason_label = Gtk.Label(label="")
+        self.dau_reason_label.set_halign(Gtk.Align.START)
+        self.dau_reason_label.set_wrap(True)
+        self.dau_reason_label.set_opacity(0.7)
+        self.dau_reason_label.set_margin_top(8)
+        antifragility_section.append(self.dau_reason_label)
+
+        box.append(antifragility_section)
+
         scroll.set_child(box)
         return scroll
 
@@ -1056,6 +1347,105 @@ class TFANWindow(Adw.ApplicationWindow):
         if nce_actions:
             self.nce_list.update_actions(nce_actions)
 
+        # === Layer 2: Cognitive Appraisal ===
+        if "emotion_label" in m and hasattr(self, "emotion_label"):
+            try:
+                self.emotion_label.set_label(m["emotion_label"])
+            except Exception:
+                pass
+
+        if "emotion_confidence" in m and "emotion_confidence" in self.brain_metric_cards:
+            try:
+                self.brain_metric_cards["emotion_confidence"].set_label(f"{float(m['emotion_confidence']):.2f}")
+            except Exception:
+                pass
+
+        # Appraisal dimensions
+        for key in ["appraisal_pleasantness", "appraisal_goal_congruence", "appraisal_control",
+                    "appraisal_certainty", "appraisal_coping_potential"]:
+            if key in m and key in self.brain_bars:
+                try:
+                    self.brain_bars[key].set_value(float(m[key]))
+                except Exception:
+                    pass
+
+        if "appraisal_explanation" in m and hasattr(self, "appraisal_explanation"):
+            try:
+                self.appraisal_explanation.set_label(m["appraisal_explanation"])
+            except Exception:
+                pass
+
+        # === Layer 3: Uncertainty Decomposition ===
+        if "explore_vs_exploit" in m and "explore_vs_exploit" in self.brain_metric_cards:
+            try:
+                eve = float(m["explore_vs_exploit"])
+                self.brain_metric_cards["explore_vs_exploit"].set_label(f"{eve:+.2f}")
+                self._apply_explore_exploit_styling(eve)
+            except Exception:
+                pass
+
+        if "should_defer" in m and "should_defer" in self.brain_metric_cards:
+            try:
+                defer = m["should_defer"]
+                self.brain_metric_cards["should_defer"].set_label("Yes" if defer else "No")
+                self._apply_defer_styling(defer)
+            except Exception:
+                pass
+
+        for key in ["uncertainty_total", "uncertainty_aleatoric", "uncertainty_epistemic", "attention_gain"]:
+            if key in m and key in self.brain_bars:
+                try:
+                    self.brain_bars[key].set_value(float(m[key]))
+                except Exception:
+                    pass
+
+        if "defer_reason" in m and hasattr(self, "defer_reason_label"):
+            try:
+                self.defer_reason_label.set_label(m["defer_reason"])
+            except Exception:
+                pass
+
+        # === TGSFN: Antifragility ===
+        if "antifragility_index" in m and "antifragility_index" in self.brain_metric_cards:
+            try:
+                af = float(m["antifragility_index"])
+                self.brain_metric_cards["antifragility_index"].set_label(f"{af:+.3f}")
+                self._apply_antifragility_styling(af)
+            except Exception:
+                pass
+
+        if "stability_margin" in m and "stability_margin" in self.brain_metric_cards:
+            try:
+                self.brain_metric_cards["stability_margin"].set_label(f"{float(m['stability_margin']):.3f}")
+            except Exception:
+                pass
+
+        if "dau_active" in m and "dau_active" in self.brain_metric_cards:
+            try:
+                dau = m["dau_active"]
+                self.brain_metric_cards["dau_active"].set_label("ACTIVE" if dau else "—")
+                self._apply_dau_styling(dau)
+            except Exception:
+                pass
+
+        for key in ["pi_q", "convexity", "jacobian_spectral_norm", "lyapunov_proxy", "fragility_exposure"]:
+            if key in m and key in self.brain_bars:
+                try:
+                    self.brain_bars[key].set_value(float(m[key]))
+                except Exception:
+                    pass
+
+        if "dau_trigger_reason" in m and hasattr(self, "dau_reason_label"):
+            try:
+                reason = m["dau_trigger_reason"]
+                action = m.get("dau_action_suggested", "")
+                if reason:
+                    self.dau_reason_label.set_label(f"{reason} → {action}")
+                else:
+                    self.dau_reason_label.set_label("")
+            except Exception:
+                pass
+
     def _apply_drive_styling(self, drive: float) -> None:
         """Apply drive-based color coding to the homeostatic section."""
         if not hasattr(self, "homeo_section"):
@@ -1093,6 +1483,66 @@ class TFANWindow(Adw.ApplicationWindow):
             label.add_css_class("valence-negative")
         else:
             label.add_css_class("valence-neutral")
+
+    def _apply_explore_exploit_styling(self, value: float) -> None:
+        """Apply explore/exploit mode styling."""
+        if not hasattr(self, "explore_card"):
+            return
+
+        label = self.brain_metric_cards.get("explore_vs_exploit")
+        if not label:
+            return
+
+        for cls in ["explore-mode", "exploit-mode"]:
+            label.remove_css_class(cls)
+
+        if value > 0.1:
+            label.add_css_class("explore-mode")
+        elif value < -0.1:
+            label.add_css_class("exploit-mode")
+
+    def _apply_defer_styling(self, defer: bool) -> None:
+        """Apply defer mode styling."""
+        if not hasattr(self, "defer_card"):
+            return
+
+        label = self.brain_metric_cards.get("should_defer")
+        if not label:
+            return
+
+        if defer:
+            label.add_css_class("defer-active")
+        else:
+            label.remove_css_class("defer-active")
+
+    def _apply_antifragility_styling(self, value: float) -> None:
+        """Apply antifragility-based styling."""
+        if not hasattr(self, "af_index_card"):
+            return
+
+        label = self.brain_metric_cards.get("antifragility_index")
+        if not label:
+            return
+
+        for cls in ["antifragile-positive", "antifragile-neutral", "antifragile-fragile"]:
+            label.remove_css_class(cls)
+
+        if value > 0.2:
+            label.add_css_class("antifragile-positive")
+        elif value < -0.2:
+            label.add_css_class("antifragile-fragile")
+        else:
+            label.add_css_class("antifragile-neutral")
+
+    def _apply_dau_styling(self, active: bool) -> None:
+        """Apply DAU active styling to the antifragility section."""
+        if not hasattr(self, "antifragility_section"):
+            return
+
+        if active:
+            self.antifragility_section.add_css_class("dau-active")
+        else:
+            self.antifragility_section.remove_css_class("dau-active")
 
     def _update_training_metrics(self, m: Dict[str, Any]) -> None:
         """Update training-specific metrics."""

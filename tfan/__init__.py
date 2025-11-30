@@ -39,6 +39,33 @@ from .tfan_telemetry import (
     push_brain_state,
 )
 
+# Layer 2: Cognitive Appraisal (EMA/CoRE)
+from .appraisal_engine import (
+    APPRAISAL_DIMENSIONS,
+    EMOTION_PATTERNS,
+    AppraisalResult,
+    AppraisalEngineStub,
+    AppraisalEngineClient,
+    create_appraisal_engine,
+)
+
+# Layer 3: Uncertainty Decomposition
+from .uncertainty_head import (
+    UncertaintyEstimate,
+    PolicyGateDecision,
+    PolicyDecision,
+    UncertaintyHead,
+    create_uncertainty_head,
+)
+
+# TGSFN: Antifragility Monitor
+from .antifragility_monitor import (
+    AntifragilityMetrics,
+    DAUTrigger,
+    AntifragilityMonitor,
+    create_antifragility_monitor,
+)
+
 __version__ = "0.1.0"
 
 __all__ = [
@@ -75,4 +102,22 @@ __all__ = [
     "TelemetryClient",
     "get_exporter",
     "push_brain_state",
+    # Layer 2: Cognitive Appraisal
+    "APPRAISAL_DIMENSIONS",
+    "EMOTION_PATTERNS",
+    "AppraisalResult",
+    "AppraisalEngineStub",
+    "AppraisalEngineClient",
+    "create_appraisal_engine",
+    # Layer 3: Uncertainty Decomposition
+    "UncertaintyEstimate",
+    "PolicyGateDecision",
+    "PolicyDecision",
+    "UncertaintyHead",
+    "create_uncertainty_head",
+    # TGSFN: Antifragility Monitor
+    "AntifragilityMetrics",
+    "DAUTrigger",
+    "AntifragilityMonitor",
+    "create_antifragility_monitor",
 ]

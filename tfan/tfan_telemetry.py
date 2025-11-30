@@ -100,6 +100,48 @@ class TfanBrainSnapshot:
     coupled_agent_drive: float = 0.0
     coupling_weight: float = 0.0
 
+    # === Layer 2: Cognitive Appraisal (EMA/CoRE) ===
+    # Appraisal of current state via CoRE-finetuned LLM
+    emotion_label: str = "neutral"
+    emotion_confidence: float = 0.0
+    appraisal_pleasantness: float = 0.0
+    appraisal_goal_congruence: float = 0.0
+    appraisal_control: float = 0.0
+    appraisal_certainty: float = 0.0
+    appraisal_coping_potential: float = 0.0
+    appraisal_explanation: str = ""
+
+    # === Layer 3: Uncertainty Decomposition ===
+    # Aleatoric (irreducible) vs Epistemic (reducible) uncertainty
+    uncertainty_total: float = 0.0
+    uncertainty_aleatoric: float = 0.0
+    uncertainty_epistemic: float = 0.0
+    uncertainty_confidence: float = 1.0
+    uncertainty_calibration_error: float = 0.0
+    # Policy decisions from uncertainty
+    explore_vs_exploit: float = 0.0      # -1 (exploit) to +1 (explore)
+    should_defer: bool = False
+    defer_reason: str = ""
+    attention_gain: float = 1.0          # LC-modulated attention multiplier
+    lr_modifier: float = 1.0             # Suggested LR modifier
+
+    # === TGSFN: Antifragility Metrics ===
+    # Thermodynamic Geometry of Stochastic Field Networks
+    pi_q: float = 0.0                    # Entropy production rate
+    pi_q_mean: float = 0.0
+    pi_q_trend: float = 0.0
+    jacobian_spectral_norm: float = 0.0  # Largest singular value
+    jacobian_condition: float = 1.0      # Condition number
+    lyapunov_proxy: float = 0.0          # Max Lyapunov exponent proxy
+    stability_margin: float = 1.0        # Distance from instability
+    convexity: float = 0.0               # Second derivative of performance
+    antifragility_index: float = 0.0     # Overall antifragility score
+    fragility_exposure: float = 0.0      # Downside risk exposure
+    # DAU (Dynamic Antifragility Unit)
+    dau_active: bool = False
+    dau_trigger_reason: str = ""
+    dau_action_suggested: str = ""
+
     def compute_drive(self) -> float:
         """
         Compute total homeostatic drive from need-setpoint mismatches.
