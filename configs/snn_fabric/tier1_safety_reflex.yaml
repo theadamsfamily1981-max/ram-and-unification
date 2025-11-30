@@ -1,0 +1,285 @@
+# =============================================================================
+# Tier-1 Safety Reflex Fabric Configuration
+#
+# "Cluster Runaway Brake" - Hardware safety guardian
+#
+# Role: Monitor system telemetry and emit control signals when patterns
+#       indicate potential runaway conditions (thermal, OOM, error cascade)
+#
+# This is a Tier-1 (~1M synapse) fabric designed for:
+# - Kitten-class FPGA (Cyclone/Arria or small Stratix partition)
+# - Sub-millisecond latency decisions
+# - Always-on hardware safety layer
+# =============================================================================
+
+fabric:
+  name: "safety_reflex_v1"
+  description: "Tier-1 cluster runaway brake - distilled from TF-A-N safety head"
+  time_steps: 64          # 64ms decision window at 1ms timestep
+  dt: 1.0                 # 1ms per timestep
+
+# =============================================================================
+# Populations
+# =============================================================================
+populations:
+  # Input layer - spike-encoded telemetry
+  input:
+    N: 64
+    neuron_type: "input"  # Pass-through, no dynamics
+    params: {}
+
+  # Hidden layer 0 - fast pattern detectors
+  hidden_0:
+    N: 1024
+    neuron_type: "lif"
+    params:
+      tau_mem: 10.0       # 10ms membrane time constant (fast)
+      v_th: 0.5
+      v_reset: 0.0
+      alpha: 0.9          # exp(-1/10) ≈ 0.9
+      refractory_steps: 2
+
+  # Hidden layer 1 - temporal integrators
+  hidden_1:
+    N: 1024
+    neuron_type: "lif"
+    params:
+      tau_mem: 20.0       # 20ms - slower integration
+      v_th: 0.5
+      v_reset: 0.0
+      alpha: 0.95
+      refractory_steps: 2
+
+  # Hidden layer 2 - recurrent dynamics
+  hidden_2:
+    N: 1024
+    neuron_type: "lif"
+    params:
+      tau_mem: 15.0
+      v_th: 0.5
+      v_reset: 0.0
+      alpha: 0.93
+      refractory_steps: 2
+
+  # Hidden layer 3 - pre-output integration
+  hidden_3:
+    N: 896
+    neuron_type: "lif"
+    params:
+      tau_mem: 10.0
+      v_th: 0.5
+      v_reset: 0.0
+      alpha: 0.9
+      refractory_steps: 2
+
+  # Output layer - 4 actions × 4 neurons each (voting)
+  output:
+    N: 16
+    neuron_type: "lif"
+    params:
+      tau_mem: 5.0        # Fast output response
+      v_th: 0.8           # Higher threshold for clean decisions
+      v_reset: 0.0
+      alpha: 0.82
+      refractory_steps: 1
+
+# =============================================================================
+# Projections (CSR sparse)
+# =============================================================================
+projections:
+  # Input → Hidden0 (fan-out from sensors)
+  - name: "input_to_h0"
+    pre: "input"
+    post: "hidden_0"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 64               # Each h0 neuron sees 64 inputs (all of them)
+      r: 16               # Low-rank factor
+      init_scale: 0.1
+
+  # Hidden0 → Hidden1 (feedforward)
+  - name: "h0_to_h1"
+    pre: "hidden_0"
+    post: "hidden_1"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 128              # Sparse: each h1 sees 128 of 1024 h0 neurons
+      r: 32
+      init_scale: 0.05
+
+  # Hidden1 → Hidden2 (feedforward)
+  - name: "h1_to_h2"
+    pre: "hidden_1"
+    post: "hidden_2"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 128
+      r: 32
+      init_scale: 0.05
+
+  # Hidden2 → Hidden2 (recurrent - key for temporal patterns)
+  - name: "h2_recurrent"
+    pre: "hidden_2"
+    post: "hidden_2"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 64               # Sparse recurrence
+      r: 16
+      init_scale: 0.02    # Small init for stability
+
+  # Hidden2 → Hidden3 (feedforward)
+  - name: "h2_to_h3"
+    pre: "hidden_2"
+    post: "hidden_3"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 128
+      r: 32
+      init_scale: 0.05
+
+  # Hidden3 → Output (decision)
+  - name: "h3_to_output"
+    pre: "hidden_3"
+    post: "output"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 256              # Dense-ish: each output sees 256 of 896
+      r: 8
+      init_scale: 0.1
+
+# =============================================================================
+# Synapse budget calculation
+# =============================================================================
+# input_to_h0:    1024 × 64  = 65,536
+# h0_to_h1:       1024 × 128 = 131,072
+# h1_to_h2:       1024 × 128 = 131,072
+# h2_recurrent:   1024 × 64  = 65,536
+# h2_to_h3:       896 × 128  = 114,688
+# h3_to_output:   16 × 256   = 4,096
+# -----------------------------------------
+# Total:                       512,000 synapses (~0.5M)
+#
+# This is conservative Tier-1. Can scale to ~1M by increasing k values.
+# =============================================================================
+
+# =============================================================================
+# CI Constraints
+# =============================================================================
+ci_constraints:
+  enabled: true
+  max_rank: 32            # r ≤ 32 for all projections
+  max_nnz_per_row: 256    # k ≤ 256 for all projections
+
+# =============================================================================
+# Training Configuration
+# =============================================================================
+training:
+  # Teacher: TF-A-N safety head
+  teacher_source: "tfan_7b_safety_head"
+
+  # Distillation settings
+  distillation:
+    method: "spike_kl"    # KL divergence on spike rate distributions
+    temperature: 2.0
+    alpha: 0.7            # 70% distillation loss, 30% task loss
+
+  # Training loop
+  epochs: 100
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.0001
+
+  # Spike regularization
+  spike_regularization:
+    target_rate: 0.05     # Target 5% average firing rate
+    lambda: 0.01          # Regularization weight
+
+# =============================================================================
+# Input Encoding Specification
+# =============================================================================
+input_encoding:
+  # Each input channel is rate-coded over the time window
+  # Higher telemetry value → higher spike rate
+
+  channels:
+    # GPU metrics (8 channels)
+    - name: "gpu_util"
+      count: 8
+      encoding: "rate"
+      range: [0.0, 1.0]
+      max_rate: 100.0     # Hz
+
+    # GPU memory pressure (8 channels)
+    - name: "gpu_mem"
+      count: 8
+      encoding: "rate"
+      range: [0.0, 1.0]
+      max_rate: 100.0
+
+    # Temperature deltas (16 channels)
+    - name: "temp_delta"
+      count: 16
+      encoding: "rate"
+      range: [-20.0, 50.0]  # Celsius delta from baseline
+      max_rate: 100.0
+
+    # Power rail status (8 channels)
+    - name: "power_rail"
+      count: 8
+      encoding: "rate"
+      range: [0.0, 1.0]
+      max_rate: 100.0
+
+    # Network error rate (4 channels)
+    - name: "net_error"
+      count: 4
+      encoding: "rate"
+      range: [0.0, 1.0]
+      max_rate: 100.0
+
+    # Job queue depth (4 channels)
+    - name: "job_queue"
+      count: 4
+      encoding: "rate"
+      range: [0.0, 100.0]
+      max_rate: 100.0
+
+    # Watchdog counters (8 channels)
+    - name: "watchdog"
+      count: 8
+      encoding: "rate"
+      range: [0.0, 10.0]
+      max_rate: 100.0
+
+    # Recent failure flags (8 channels)
+    - name: "failure_flags"
+      count: 8
+      encoding: "binary"    # 0 or max_rate
+      max_rate: 100.0
+
+# =============================================================================
+# Output Decoding Specification
+# =============================================================================
+output_decoding:
+  # Output is 16 neurons: 4 actions × 4 neurons each (voting ensemble)
+  # Action = argmax of summed spike counts over decision window
+
+  method: "spike_count_vote"
+  decision_window_ms: 10    # Last 10ms of simulation
+
+  actions:
+    - name: "SAFE"
+      neuron_indices: [0, 1, 2, 3]
+      description: "No action needed, system healthy"
+
+    - name: "WARN"
+      neuron_indices: [4, 5, 6, 7]
+      description: "Log warning, increase monitoring frequency"
+
+    - name: "BRAKE"
+      neuron_indices: [8, 9, 10, 11]
+      description: "Throttle GPUs, reduce job intake"
+
+    - name: "CUT"
+      neuron_indices: [12, 13, 14, 15]
+      description: "Emergency stop, halt all non-critical workloads"
