@@ -73,7 +73,7 @@ class AvatarCache:
         audio_path: Path,
         **kwargs
     ) -> str:
-        """Generate cache key from inputs.
+        """Generate cache key from inputs using chunked reads.
 
         Args:
             image_path: Path to avatar image
@@ -85,19 +85,61 @@ class AvatarCache:
         """
         hasher = hashlib.sha256()
 
-        # Hash image file
-        with open(image_path, 'rb') as f:
-            hasher.update(f.read())
+        # CHUNK_SIZE to avoid blocking on large files
+        CHUNK_SIZE = 64 * 1024  # 64KB chunks
 
-        # Hash audio file
-        with open(audio_path, 'rb') as f:
-            hasher.update(f.read())
+        # Hash image file in chunks to avoid blocking on large files
+        try:
+            with open(image_path, 'rb') as f:
+                while chunk := f.read(CHUNK_SIZE):
+                    hasher.update(chunk)
+        except (IOError, OSError) as e:
+            logger.error(f"Error reading image file {image_path}: {e}")
+            # Fallback: hash the path string instead
+            hasher.update(str(image_path).encode())
+
+        # Hash audio file in chunks
+        try:
+            with open(audio_path, 'rb') as f:
+                while chunk := f.read(CHUNK_SIZE):
+                    hasher.update(chunk)
+        except (IOError, OSError) as e:
+            logger.error(f"Error reading audio file {audio_path}: {e}")
+            # Fallback: hash the path string instead
+            hasher.update(str(audio_path).encode())
 
         # Hash additional parameters
         params_str = json.dumps(kwargs, sort_keys=True)
         hasher.update(params_str.encode())
 
         return hasher.hexdigest()
+
+    async def generate_key_async(
+        self,
+        image_path: Path,
+        audio_path: Path,
+        **kwargs
+    ) -> str:
+        """Async version of generate_key for use in async contexts.
+
+        Args:
+            image_path: Path to avatar image
+            audio_path: Path to audio file
+            **kwargs: Additional parameters that affect generation
+
+        Returns:
+            Cache key (SHA256 hash)
+        """
+        import asyncio
+        import concurrent.futures
+
+        # Run blocking I/O in thread pool executor
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            return await loop.run_in_executor(
+                executor,
+                lambda: self.generate_key(image_path, audio_path, **kwargs)
+            )
 
     def get(self, cache_key: str) -> Optional[Path]:
         """Get cached video.

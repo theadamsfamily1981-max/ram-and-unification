@@ -1,0 +1,132 @@
+# SNN Fabric Configuration for TF-A-N Integration
+# 4-population architecture: input -> hidden1 -> hidden2 -> output
+
+fabric:
+  name: "tfan_snn_fabric_4096"
+  description: "SNN fabric for TF-A-N with 4 populations and TLS+low-rank projections"
+  time_steps: 256
+  dt: 1.0  # ms
+
+populations:
+  input:
+    N: 1024
+    neuron_type: "lif"
+    params:
+      tau_mem: 20.0      # membrane time constant (ms)
+      tau_syn: 5.0       # synaptic time constant (ms)
+      v_th: 1.0          # spike threshold
+      v_reset: 0.0       # reset potential
+      v_rest: 0.0        # resting potential
+      alpha: 0.95        # membrane decay factor
+      beta: 0.85         # synaptic decay factor
+      refractory_steps: 2
+
+  hidden1:
+    N: 2048
+    neuron_type: "lif"
+    params:
+      tau_mem: 20.0
+      tau_syn: 5.0
+      v_th: 1.0
+      v_reset: 0.0
+      v_rest: 0.0
+      alpha: 0.95
+      beta: 0.85
+      refractory_steps: 2
+
+  hidden2:
+    N: 2048
+    neuron_type: "lif"
+    params:
+      tau_mem: 20.0
+      tau_syn: 5.0
+      v_th: 1.0
+      v_reset: 0.0
+      v_rest: 0.0
+      alpha: 0.95
+      beta: 0.85
+      refractory_steps: 2
+
+  output:
+    N: 1024
+    neuron_type: "lif"
+    params:
+      tau_mem: 20.0
+      tau_syn: 5.0
+      v_th: 1.0
+      v_reset: 0.0
+      v_rest: 0.0
+      alpha: 0.95
+      beta: 0.85
+      refractory_steps: 2
+
+projections:
+  # Input -> Hidden1 (feedforward)
+  - name: "input_to_hidden1"
+    pre: "input"
+    post: "hidden1"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 64              # nonzeros per row (TLS sparsity)
+      r: 32              # low-rank factor
+      init_scale: 0.02   # weight initialization scale
+      trainable: true
+
+  # Hidden1 -> Hidden2 (feedforward)
+  - name: "hidden1_to_hidden2"
+    pre: "hidden1"
+    post: "hidden2"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 64
+      r: 32
+      init_scale: 0.02
+      trainable: true
+
+  # Hidden2 -> Output (feedforward)
+  - name: "hidden2_to_output"
+    pre: "hidden2"
+    post: "output"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 64
+      r: 32
+      init_scale: 0.02
+      trainable: true
+
+  # Hidden1 recurrent (self-connections)
+  - name: "hidden1_recurrent"
+    pre: "hidden1"
+    post: "hidden1"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 32              # sparser for recurrent
+      r: 16
+      init_scale: 0.01
+      trainable: true
+
+  # Hidden2 recurrent (self-connections)
+  - name: "hidden2_recurrent"
+    pre: "hidden2"
+    post: "hidden2"
+    synapse_type: "lowrank_masked"
+    params:
+      k: 32
+      r: 16
+      init_scale: 0.01
+      trainable: true
+
+# CI (Causal Invariance) constraints
+ci_constraints:
+  enabled: true
+  max_rank: 32           # r <= 32
+  max_nnz_per_row: 64    # k <= 64
+  enforce_at: "build"    # enforce during fabric build
+
+# Training integration
+training:
+  spike_regularization:
+    target_rate: 0.1     # target firing rate
+    lambda_rate: 0.01    # regularization weight
+  gradient_surrogate: "fast_sigmoid"
+  surrogate_scale: 25.0

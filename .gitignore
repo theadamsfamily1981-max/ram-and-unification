@@ -38,11 +38,13 @@ env/
 # Environment
 .env
 
-# Models & Data
-models/
+# Models & Data (downloaded weights, not source code)
+/models/
 *.pth
 *.ckpt
 *.safetensors
+# Keep src/models/ for source code
+!src/models/
 
 # Media files
 uploads/

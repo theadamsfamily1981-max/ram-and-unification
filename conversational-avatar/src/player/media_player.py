@@ -60,16 +60,17 @@ class MediaPlayer:
         Returns:
             Engine name
         """
-        # Check for ffplay
+        # Check for ffplay with timeout to prevent lockup
         try:
             subprocess.run(
                 ["ffplay", "-version"],
                 capture_output=True,
-                check=True
+                check=True,
+                timeout=5  # 5 second timeout for version check
             )
             logger.info("FFplay detected, using ffplay engine")
             return "ffplay"
-        except (FileNotFoundError, subprocess.CalledProcessError):
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
             pass
 
         # Fall back to OpenCV
@@ -185,6 +186,9 @@ class MediaPlayer:
             fullscreen: Fullscreen mode
             blocking: Block until complete
         """
+        # Timeout for video playback - 10 minutes max to prevent indefinite lockup
+        FFPLAY_TIMEOUT_SECONDS = 600
+
         cmd = ["ffplay", "-autoexit", "-loglevel", "error"]
 
         if fullscreen:
@@ -196,7 +200,10 @@ class MediaPlayer:
         cmd.append(str(video_path))
 
         if blocking:
-            subprocess.run(cmd, check=True)
+            try:
+                subprocess.run(cmd, check=True, timeout=FFPLAY_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                logger.warning(f"FFplay playback timed out after {FFPLAY_TIMEOUT_SECONDS}s")
         else:
             subprocess.Popen(cmd)
 
@@ -278,10 +285,11 @@ class MediaPlayer:
             subprocess.run(
                 ["ffplay", "-version"],
                 capture_output=True,
-                check=True
+                check=True,
+                timeout=5  # 5 second timeout
             )
             logger.info("✅ FFplay available")
-        except:
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
             logger.info("ℹ️  FFplay not available (optional)")
 
         logger.info("Media playback test complete")

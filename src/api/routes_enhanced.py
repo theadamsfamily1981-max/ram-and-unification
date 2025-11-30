@@ -53,6 +53,41 @@ job_futures: Dict[str, asyncio.Future] = {}
 # WebSocket connections for progress streaming
 websocket_connections: Dict[str, WebSocket] = {}
 
+# Lock for thread-safe WebSocket operations
+_websocket_lock = asyncio.Lock()
+
+# Configuration for job cleanup
+JOB_RETENTION_SECONDS = 3600  # Keep completed jobs for 1 hour
+JOB_CLEANUP_INTERVAL = 300   # Run cleanup every 5 minutes
+WEBSOCKET_TIMEOUT_SECONDS = 300  # WebSocket timeout: 5 minutes max
+
+
+async def cleanup_old_jobs():
+    """Background task to clean up old completed jobs."""
+    while True:
+        try:
+            await asyncio.sleep(JOB_CLEANUP_INTERVAL)
+            current_time = time.time()
+            jobs_to_remove = []
+
+            for job_id, job in jobs.items():
+                if job["status"] in ["completed", "failed", "cancelled"]:
+                    age = current_time - job.get("created_at", current_time)
+                    if age > JOB_RETENTION_SECONDS:
+                        jobs_to_remove.append(job_id)
+
+            for job_id in jobs_to_remove:
+                if job_id in jobs:
+                    del jobs[job_id]
+                if job_id in job_futures:
+                    del job_futures[job_id]
+                logger.debug(f"Cleaned up old job: {job_id}")
+
+            if jobs_to_remove:
+                logger.info(f"Job cleanup: removed {len(jobs_to_remove)} old jobs")
+        except Exception as e:
+            logger.error(f"Job cleanup error: {e}")
+
 
 def initialize_globals():
     """Initialize global instances with configuration."""
@@ -124,6 +159,8 @@ def get_generator() -> AvatarGenerator:
 async def startup():
     """Initialize on startup."""
     initialize_globals()
+    # Start background job cleanup task
+    asyncio.create_task(cleanup_old_jobs())
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -244,20 +281,25 @@ async def upload_audio(file: UploadFile = File(...)):
 
 
 async def send_progress_update(job_id: str, progress: int, status: str, message: str = ""):
-    """Send progress update via WebSocket if connected."""
-    if job_id in websocket_connections:
-        try:
-            ws = websocket_connections[job_id]
-            await ws.send_json({
-                "job_id": job_id,
-                "progress": progress,
-                "status": status,
-                "message": message
-            })
-        except:
-            # Connection closed
-            if job_id in websocket_connections:
-                del websocket_connections[job_id]
+    """Send progress update via WebSocket if connected (thread-safe)."""
+    async with _websocket_lock:
+        ws = websocket_connections.get(job_id)
+
+    if ws is None:
+        return
+
+    try:
+        await ws.send_json({
+            "job_id": job_id,
+            "progress": progress,
+            "status": status,
+            "message": message
+        })
+    except Exception as e:
+        # Connection closed or error - remove from connections
+        logger.debug(f"WebSocket send failed for job {job_id}: {e}")
+        async with _websocket_lock:
+            websocket_connections.pop(job_id, None)
 
 
 async def process_avatar_generation(job_id: str, request: GenerateRequest):
@@ -448,24 +490,72 @@ async def cancel_job(job_id: str):
 
 @router.websocket("/ws/progress/{job_id}")
 async def websocket_progress(websocket: WebSocket, job_id: str):
-    """WebSocket endpoint for real-time progress updates."""
+    """WebSocket endpoint for real-time progress updates with timeout protection."""
     await websocket.accept()
-    websocket_connections[job_id] = websocket
+
+    # Thread-safe WebSocket registration
+    async with _websocket_lock:
+        websocket_connections[job_id] = websocket
+
+    start_time = time.time()
+    iterations = 0
 
     try:
         while True:
-            # Keep connection alive
+            iterations += 1
+            # Keep connection alive with ping
             await asyncio.sleep(1)
 
-            # Check if job is complete
-            if job_id in jobs and jobs[job_id]["status"] in ["completed", "failed", "cancelled"]:
+            # CRITICAL: Check timeout to prevent infinite loop lockup
+            elapsed = time.time() - start_time
+            if elapsed > WEBSOCKET_TIMEOUT_SECONDS:
+                logger.warning(f"WebSocket timeout for job {job_id} after {elapsed:.1f}s")
+                try:
+                    await websocket.send_json({
+                        "job_id": job_id,
+                        "status": "timeout",
+                        "message": f"Connection timed out after {WEBSOCKET_TIMEOUT_SECONDS}s"
+                    })
+                except Exception:
+                    pass
+                break
+
+            # Check if job exists and is complete
+            job = jobs.get(job_id)
+            if job is None:
+                # Job doesn't exist - either never created or was cleaned up
+                if iterations > 10:  # Give it 10 seconds to appear
+                    logger.warning(f"WebSocket: Job {job_id} not found, closing connection")
+                    try:
+                        await websocket.send_json({
+                            "job_id": job_id,
+                            "status": "not_found",
+                            "message": "Job not found"
+                        })
+                    except Exception:
+                        pass
+                    break
+            elif job["status"] in ["completed", "failed", "cancelled"]:
+                # Send final status and close
+                try:
+                    await websocket.send_json({
+                        "job_id": job_id,
+                        "progress": job.get("progress", 100),
+                        "status": job["status"],
+                        "message": "Job finished"
+                    })
+                except Exception:
+                    pass
                 break
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for job {job_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for job {job_id}: {e}")
     finally:
-        if job_id in websocket_connections:
-            del websocket_connections[job_id]
+        # Thread-safe cleanup
+        async with _websocket_lock:
+            websocket_connections.pop(job_id, None)
 
 
 @router.get("/download/{filename}")
