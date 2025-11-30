@@ -23,6 +23,11 @@ from .tfan_core import (
 )
 
 from .telemetry import TelemetryEmitter
+from .tfan_hud_metrics import (
+    TFANHudMetricsClient,
+    get_hud_client,
+    hud_update,
+)
 
 __version__ = "0.1.0"
 
@@ -45,6 +50,10 @@ __all__ = [
     "create_tfan_core",
     "create_udk_controller",
     "create_cos",
-    # Telemetry
+    # Telemetry (legacy)
     "TelemetryEmitter",
+    # HUD Metrics (new - for GNOME cockpit)
+    "TFANHudMetricsClient",
+    "get_hud_client",
+    "hud_update",
 ]

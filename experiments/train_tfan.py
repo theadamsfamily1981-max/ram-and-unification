@@ -2,8 +2,14 @@
 # experiments/train_tfan.py
 # T-FAN Training Loop with Live Telemetry
 #
-# Trains the T-FAN model on synthetic data and emits metrics to ~/.tfan/metrics.json
-# for the GNOME HUD to visualize.
+# Trains the T-FAN model on synthetic data and emits metrics to
+# XDG_RUNTIME_DIR/tfan_hud_metrics.json for the GNOME Cockpit to visualize.
+#
+# Usage:
+#   python experiments/train_tfan.py --epochs 100 --device cuda
+#
+# Then in another terminal:
+#   python hud/tfan_gnome.py
 
 from __future__ import annotations
 
@@ -24,7 +30,7 @@ from tfan import (
     TFanCore,
     UDKController,
     CognitiveOffloadingSubsystem,
-    TelemetryEmitter,
+    TFANHudMetricsClient,
     create_tfan_core,
     create_udk_controller,
     create_cos,
@@ -98,7 +104,8 @@ def train_epoch(
     cos: CognitiveOffloadingSubsystem,
     dataset: SyntheticDataset,
     optimizer: optim.Optimizer,
-    telemetry: TelemetryEmitter,
+    hud: TFANHudMetricsClient,
+    nce_actions: List[Dict[str, Any]],
     epoch: int,
     global_step: int,
     device: torch.device,
@@ -130,32 +137,43 @@ def train_epoch(
         loss.backward()
         optimizer.step()
 
+        # Compute accuracy
+        with torch.no_grad():
+            preds = outputs["logits"].argmax(dim=-1)
+            accuracy = (preds == batch["labels"]).float().mean().item()
+
         epoch_loss += loss.item()
         num_batches += 1
         global_step += 1
 
-        # Emit telemetry
+        # Extract Betti features
+        beta_k = outputs["topology"]["beta_k"]
+        beta0 = float(beta_k[0].item()) if len(beta_k) > 0 else 0.0
+        beta1 = float(beta_k[1].item()) if len(beta_k) > 1 else 0.0
+
+        # Emit telemetry to GNOME cockpit
         if global_step % log_every == 0:
-            udk_state = {
-                "sigma_proxy": udk.state.sigma_proxy,
-                "epsilon_proxy": udk.state.epsilon_proxy,
-                "L_topo": udk.state.L_topo,
-                "kappa_proxy": udk.state.kappa_proxy,
-            }
-
-            extra = {
-                "epoch": epoch,
-                "l_utility": losses["l_utility"].item(),
-                "l_topo": losses["l_topo"].item(),
-                "lambda_topo": losses["lambda_topo"],
-                "utcf": udk.utcf_metrics_cost(),
-            }
-
-            telemetry.log_step(
+            hud.update(
+                # Basic training metrics
                 step=global_step,
+                epoch=epoch,
                 loss=loss.item(),
-                udk_state=udk_state,
-                extra=extra,
+                accuracy=accuracy,
+                # UDK proxies (T-FAN brain state)
+                sigma_proxy=float(udk.state.sigma_proxy),
+                epsilon_proxy=float(udk.state.epsilon_proxy),
+                kappa_proxy=float(udk.state.kappa_proxy),
+                L_topo=float(udk.state.L_topo),
+                # Betti numbers
+                beta0=beta0,
+                beta1=beta1,
+                # Costs and weights
+                utcf=float(udk.utcf_metrics_cost()),
+                lambda_topo=float(losses["lambda_topo"]),
+                l_utility=float(losses["l_utility"].item()),
+                l_topo=float(losses["l_topo"].item()),
+                # NCE actions (pass the whole list)
+                nce_actions=nce_actions[-10:],  # Keep last 10
             )
 
         # Periodic NCE check
@@ -163,18 +181,21 @@ def train_epoch(
             sigma = udk.state.sigma_proxy
             best_action = cos.get_best_action(sigma)
 
-            if best_action and best_action["should_act"]:
-                telemetry.log_nce_action(
-                    step=global_step,
-                    action_type=best_action["action_type"],
-                    benefit=best_action["benefit"],
-                    cost_ext=best_action["cost_ext"],
-                    executed=True,
-                )
-                print(f"  [Step {global_step}] NCE: {best_action['action_type']} "
-                      f"(benefit={best_action['benefit']:.1f} > cost={best_action['cost_ext']:.1f})")
+            if best_action:
+                action_record = {
+                    "step": global_step,
+                    "action_type": best_action["action_type"],
+                    "benefit": best_action["benefit"],
+                    "cost_ext": best_action["cost_ext"],
+                    "should_act": best_action["should_act"],
+                    "executed": best_action["should_act"],
+                }
+                nce_actions.append(action_record)
 
-    avg_loss = epoch_loss / num_batches if num_batches > 0 else 0.0
+                if best_action["should_act"]:
+                    print(f"  [Step {global_step}] NCE: {best_action['action_type']} "
+                          f"(benefit={best_action['benefit']:.1f} > cost={best_action['cost_ext']:.1f})")
+
     return global_step
 
 
@@ -210,7 +231,12 @@ def train(
 
     udk = create_udk_controller()
     cos = create_cos(horizon_steps=5000)
-    telemetry = TelemetryEmitter()
+
+    # HUD metrics client (writes to XDG_RUNTIME_DIR/tfan_hud_metrics.json)
+    hud = TFANHudMetricsClient(model_id="tfan_main")
+
+    # NCE action history (shared list that gets updated)
+    nce_actions: List[Dict[str, Any]] = []
 
     # Optimizer
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
@@ -227,7 +253,8 @@ def train(
 
     # Training loop
     print(f"\nStarting training for {num_epochs} epochs...")
-    print(f"Telemetry → {telemetry.metrics_file}")
+    print(f"HUD Metrics → {hud.path}")
+    print("Launch the cockpit: python hud/tfan_gnome.py")
     print("=" * 60)
 
     global_step = 0
@@ -241,7 +268,8 @@ def train(
             cos=cos,
             dataset=dataset,
             optimizer=optimizer,
-            telemetry=telemetry,
+            hud=hud,
+            nce_actions=nce_actions,
             epoch=epoch,
             global_step=global_step,
             device=device,
@@ -264,12 +292,16 @@ def train(
 
     print("=" * 60)
     print("Training complete!")
-    print(f"Final metrics saved to: {telemetry.metrics_file}")
 
     # Final summary
     print("\nFinal UDK State:")
     for k, v in udk.get_diagnostics().items():
         print(f"  {k}: {v:.6f}")
+
+    print(f"\nNCE Actions taken: {sum(1 for a in nce_actions if a.get('executed', False))}/{len(nce_actions)}")
+
+    # Cleanup
+    hud.close()
 
     return model, udk, cos
 
@@ -280,7 +312,7 @@ def train(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Train T-FAN with live telemetry",
+        description="Train T-FAN with live telemetry to GNOME Cockpit",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
