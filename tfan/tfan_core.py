@@ -263,6 +263,175 @@ class UDKState:
     kappa_proxy: float = 0.0
 
 
+# ============================================================================
+#  Layer 1: Homeostatic Core (The "Vulnerable Body")
+# ============================================================================
+
+@dataclass
+class HomeostaticNeeds:
+    """
+    Layer 1 homeostatic needs - the "vulnerable body" of the agent.
+
+    Per HRRL and Affective Taxis hypothesis:
+    - Each need has a current value and a set-point
+    - Drive = Σ |need_i - setpoint_i|
+    - The agent is intrinsically motivated to minimize total drive
+    """
+    # Current need values (0.0 = depleted, 1.0 = saturated)
+    energy: float = 0.5       # Computational resources available
+    integrity: float = 0.9    # Model coherence / no corruption
+    cogload: float = 0.3      # Cognitive load (lower = more capacity)
+    social: float = 0.5       # Social alignment / rapport with user
+    novelty: float = 0.4      # Exploration drive / curiosity
+    safety: float = 0.8       # Safety margin / risk aversion
+
+    # Set-points (what the agent "wants" each need to be)
+    sp_energy: float = 0.8
+    sp_integrity: float = 0.95
+    sp_cogload: float = 0.2   # Low cognitive load preferred
+    sp_social: float = 0.7
+    sp_novelty: float = 0.5
+    sp_safety: float = 0.85
+
+
+class HomeostaticCore:
+    """
+    Layer 1: The Homeostatic Core - implements HRRL drive reduction.
+
+    This is the "vulnerable body" that generates intrinsic motivation.
+    The agent's entire policy is to follow the affective gradient that
+    minimizes total homeostatic drive.
+
+    Per the Affective Taxis hypothesis:
+      - Valence = -dσ/dt (pleasure when free energy decreasing)
+      - Arousal = |UTCF| (magnitude of homeostatic error)
+    """
+
+    def __init__(self, needs: Optional[HomeostaticNeeds] = None):
+        self.needs = needs or HomeostaticNeeds()
+        self._prev_drive: Optional[float] = None
+        self._drive_history: deque = deque(maxlen=100)
+
+        # Homeostatic coupling for prosociality
+        self.coupled = False
+        self.coupling_weight = 0.3
+        self.coupled_agent_drive = 0.0
+
+    def compute_drive(self) -> float:
+        """
+        Compute total homeostatic drive from need-setpoint mismatches.
+
+        D_t = Σ |need_i - setpoint_i| + w * D_coupled
+
+        Returns:
+            Total drive (lower = better)
+        """
+        n = self.needs
+        drive = 0.0
+
+        # Sum of absolute deviations from set-points
+        drive += abs(n.energy - n.sp_energy)
+        drive += abs(n.integrity - n.sp_integrity)
+        drive += abs(n.cogload - n.sp_cogload)
+        drive += abs(n.social - n.sp_social)
+        drive += abs(n.novelty - n.sp_novelty)
+        drive += abs(n.safety - n.sp_safety)
+
+        # Homeostatic coupling (prosociality)
+        if self.coupled:
+            drive += self.coupling_weight * self.coupled_agent_drive
+
+        self._drive_history.append(drive)
+        return drive
+
+    def compute_valence(self) -> float:
+        """
+        Compute affective valence from drive trajectory.
+
+        Valence = -dD/dt (positive when drive is decreasing = "pleasure")
+        """
+        if len(self._drive_history) < 2:
+            return 0.0
+
+        # Simple first derivative approximation
+        d_drive = self._drive_history[-1] - self._drive_history[-2]
+        return -d_drive  # Positive valence when drive decreasing
+
+    def update_from_training(
+        self,
+        loss: float,
+        accuracy: float,
+        grad_norm: float,
+        utcf: float,
+    ) -> None:
+        """
+        Update homeostatic needs based on training dynamics.
+
+        This maps training signals to the "vulnerable body":
+          - High loss → depletes energy
+          - Low accuracy → threatens integrity
+          - High grad norm → increases cognitive load
+          - High UTCF → threatens safety
+        """
+        # Energy depletes with high loss, recovers with low loss
+        self.needs.energy = max(0.0, min(1.0,
+            self.needs.energy - 0.01 * (loss - 1.0)
+        ))
+
+        # Integrity tracks accuracy
+        self.needs.integrity = 0.9 * self.needs.integrity + 0.1 * accuracy
+
+        # Cognitive load increases with gradient instability
+        self.needs.cogload = max(0.0, min(1.0,
+            0.8 * self.needs.cogload + 0.2 * min(1.0, grad_norm / 10.0)
+        ))
+
+        # Safety threatened by high UTCF
+        self.needs.safety = max(0.0, min(1.0,
+            0.9 * self.needs.safety + 0.1 * (1.0 - min(1.0, utcf))
+        ))
+
+        # Novelty satisfied when learning (loss decreasing)
+        if len(self._drive_history) >= 2:
+            improvement = self._drive_history[-2] - self._drive_history[-1]
+            if improvement > 0:
+                self.needs.novelty = min(1.0, self.needs.novelty + 0.02)
+            else:
+                self.needs.novelty = max(0.0, self.needs.novelty - 0.01)
+
+    def couple_to_agent(self, inferred_drive: float, weight: float = 0.3) -> None:
+        """
+        Enable homeostatic coupling for prosociality.
+
+        Per Yoshida et al. (2025): The agent's drive literally includes
+        the inferred distress of the coupled agent (user), making
+        prosocial behavior the mathematically optimal policy.
+
+        Args:
+            inferred_drive: Inferred homeostatic drive of coupled agent
+            weight: Coupling strength (0 = no coupling, 1 = full coupling)
+        """
+        self.coupled = True
+        self.coupling_weight = weight
+        self.coupled_agent_drive = inferred_drive
+
+    def get_state(self) -> Dict[str, float]:
+        """Return current homeostatic state for telemetry."""
+        n = self.needs
+        return {
+            "drive_total": self.compute_drive(),
+            "n_energy": n.energy,
+            "n_integrity": n.integrity,
+            "n_cogload": n.cogload,
+            "n_social": n.social,
+            "n_novelty": n.novelty,
+            "n_safety": n.safety,
+            "valence": self.compute_valence(),
+            "coupled": self.coupled,
+            "coupled_agent_drive": self.coupled_agent_drive,
+        }
+
+
 class UDKController:
     """
     Governs T-FAN's global cost landscape via the Unified Topo-Thermodynamic
@@ -300,6 +469,9 @@ class UDKController:
 
         self.state = UDKState()
         self.dissipation_monitor = DissipationMonitor(window=100)
+
+        # Layer 1: Homeostatic Core (the "vulnerable body")
+        self.homeostatic_core = HomeostaticCore()
 
         # History for diagnostics
         self.utcf_history: deque = deque(maxlen=100)
@@ -390,7 +562,7 @@ class UDKController:
 
     def get_diagnostics(self) -> Dict[str, float]:
         """Return current state and metrics for logging."""
-        return {
+        diag = {
             "sigma_proxy": self.state.sigma_proxy,
             "epsilon_proxy": self.state.epsilon_proxy,
             "L_topo": self.state.L_topo,
@@ -399,6 +571,32 @@ class UDKController:
             "utcf": self.utcf_metrics_cost(),
             "utcf_mean": sum(self.utcf_history) / len(self.utcf_history) if self.utcf_history else 0.0,
         }
+        # Include Layer 1 homeostatic state
+        diag.update(self.homeostatic_core.get_state())
+        return diag
+
+    def update_homeostatic_core(
+        self,
+        loss: float,
+        accuracy: float,
+        grad_norm: float,
+    ) -> None:
+        """
+        Update Layer 1 homeostatic needs from training signals.
+
+        Maps training dynamics to the "vulnerable body":
+          - High loss → depletes energy
+          - Low accuracy → threatens integrity
+          - High grad norm → increases cognitive load
+          - High UTCF → threatens safety
+        """
+        utcf = self.utcf_metrics_cost()
+        self.homeostatic_core.update_from_training(
+            loss=loss,
+            accuracy=accuracy,
+            grad_norm=grad_norm,
+            utcf=utcf,
+        )
 
 
 # ============================================================================

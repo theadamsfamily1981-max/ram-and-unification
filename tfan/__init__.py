@@ -6,6 +6,9 @@ from .tfan_core import (
     TopFusionEncoder,
     TopologyHead,
     TopologicalRegularizer,
+    # Layer 1: Homeostatic Core
+    HomeostaticNeeds,
+    HomeostaticCore,
     # UDK Components
     DissipationMonitor,
     UDKState,
@@ -28,6 +31,13 @@ from .tfan_hud_metrics import (
     get_hud_client,
     hud_update,
 )
+from .tfan_telemetry import (
+    TfanBrainSnapshot,
+    TelemetryExporter,
+    TelemetryClient,
+    get_exporter,
+    push_brain_state,
+)
 
 __version__ = "0.1.0"
 
@@ -36,6 +46,9 @@ __all__ = [
     "TopFusionEncoder",
     "TopologyHead",
     "TopologicalRegularizer",
+    # Layer 1: Homeostatic Core
+    "HomeostaticNeeds",
+    "HomeostaticCore",
     # UDK
     "DissipationMonitor",
     "UDKState",
@@ -52,8 +65,14 @@ __all__ = [
     "create_cos",
     # Telemetry (legacy)
     "TelemetryEmitter",
-    # HUD Metrics (new - for GNOME cockpit)
+    # HUD Metrics (GNOME cockpit - simple)
     "TFANHudMetricsClient",
     "get_hud_client",
     "hud_update",
+    # Brain Telemetry (full 4-layer snapshot)
+    "TfanBrainSnapshot",
+    "TelemetryExporter",
+    "TelemetryClient",
+    "get_exporter",
+    "push_brain_state",
 ]

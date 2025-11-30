@@ -221,6 +221,68 @@ progressbar progress {
     );
     pointer-events: none;
 }
+
+/* === Drive-Based Color Coding (Homeostatic State) === */
+.drive-low {
+    border-color: rgba(0, 200, 120, 0.8) !important;
+    box-shadow: 0 0 16px rgba(0, 200, 120, 0.3);
+}
+
+.drive-med {
+    border-color: rgba(255, 200, 0, 0.8) !important;
+    box-shadow: 0 0 16px rgba(255, 200, 0, 0.3);
+}
+
+.drive-high {
+    border-color: rgba(255, 80, 80, 0.9) !important;
+    box-shadow: 0 0 20px rgba(255, 80, 80, 0.4);
+}
+
+/* === Homeostatic Need Bars === */
+.need-bar-satisfied progressbar progress {
+    background: linear-gradient(90deg, #00ff88 0%, #00ddaa 100%);
+}
+
+.need-bar-moderate progressbar progress {
+    background: linear-gradient(90deg, #ffcc00 0%, #ffaa00 100%);
+}
+
+.need-bar-depleted progressbar progress {
+    background: linear-gradient(90deg, #ff6644 0%, #ff4444 100%);
+}
+
+/* === Valence Indicator === */
+.valence-positive {
+    color: #00ff88 !important;
+    text-shadow: 0 0 12px rgba(0, 255, 136, 0.6);
+}
+
+.valence-negative {
+    color: #ff6644 !important;
+    text-shadow: 0 0 12px rgba(255, 102, 68, 0.6);
+}
+
+.valence-neutral {
+    color: #88ddff !important;
+}
+
+/* === Homeostatic Core Section === */
+.homeo-section {
+    background: linear-gradient(135deg, rgba(20, 25, 35, 0.95) 0%, rgba(15, 18, 28, 0.98) 100%);
+    border: 1px solid rgba(0, 200, 170, 0.25);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.homeo-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(0, 255, 200, 0.8);
+    margin-bottom: 12px;
+}
 """
 
 
@@ -643,8 +705,68 @@ class TFANWindow(Adw.ApplicationWindow):
         )
         box.append(status)
 
+        # === Layer 1: Homeostatic Core (The "Vulnerable Body") ===
+        homeo_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        homeo_section.add_css_class("homeo-section")
+        self.homeo_section = homeo_section  # Store for drive-based styling
+
+        homeo_title = Gtk.Label(label="LAYER 1: HOMEOSTATIC CORE")
+        homeo_title.add_css_class("homeo-section-title")
+        homeo_title.set_halign(Gtk.Align.START)
+        homeo_section.append(homeo_title)
+
+        # Drive indicator (total homeostatic error)
+        drive_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        drive_box.set_margin_bottom(8)
+
+        drive_card = MetricCard("DRIVE D(t)", "—", None, "brain-metric-card", "brain-value")
+        self.brain_metric_cards["drive_total"] = drive_card.value_label
+        self.drive_card = drive_card  # Store for styling
+        drive_box.append(drive_card)
+
+        valence_card = MetricCard("VALENCE", "—", None, "brain-metric-card", "brain-value")
+        self.brain_metric_cards["valence"] = valence_card.value_label
+        self.valence_card = valence_card  # Store for styling
+        drive_box.append(valence_card)
+
+        homeo_section.append(drive_box)
+
+        # Homeostatic needs bars
+        self.brain_bars["n_energy"] = BrainMetricBar(
+            "Energy (computational resources)", 0.0, 1.0, "{:.2f}"
+        )
+        homeo_section.append(self.brain_bars["n_energy"])
+
+        self.brain_bars["n_integrity"] = BrainMetricBar(
+            "Integrity (model coherence)", 0.0, 1.0, "{:.2f}"
+        )
+        homeo_section.append(self.brain_bars["n_integrity"])
+
+        self.brain_bars["n_cogload"] = BrainMetricBar(
+            "Cognitive Load (lower = more capacity)", 0.0, 1.0, "{:.2f}"
+        )
+        homeo_section.append(self.brain_bars["n_cogload"])
+
+        self.brain_bars["n_social"] = BrainMetricBar(
+            "Social Alignment", 0.0, 1.0, "{:.2f}"
+        )
+        homeo_section.append(self.brain_bars["n_social"])
+
+        self.brain_bars["n_novelty"] = BrainMetricBar(
+            "Novelty / Curiosity", 0.0, 1.0, "{:.2f}"
+        )
+        homeo_section.append(self.brain_bars["n_novelty"])
+
+        self.brain_bars["n_safety"] = BrainMetricBar(
+            "Safety Margin", 0.0, 1.0, "{:.2f}"
+        )
+        homeo_section.append(self.brain_bars["n_safety"])
+
+        box.append(homeo_section)
+        box.append(Gtk.Separator())
+
         # === UDK Proxies Section ===
-        udk_label = Gtk.Label(label="UDK THERMODYNAMIC PROXIES")
+        udk_label = Gtk.Label(label="LAYER 3: UDK THERMODYNAMIC PROXIES")
         udk_label.add_css_class("metric-label")
         udk_label.add_css_class("metric-label-bright")
         udk_label.set_halign(Gtk.Align.START)
@@ -671,7 +793,7 @@ class TFANWindow(Adw.ApplicationWindow):
         box.append(Gtk.Separator())
 
         # === TFF Topology Section ===
-        tff_label = Gtk.Label(label="TFF TOPOLOGICAL STATE")
+        tff_label = Gtk.Label(label="LAYER 2: TFF TOPOLOGICAL STATE")
         tff_label.add_css_class("metric-label")
         tff_label.add_css_class("metric-label-bright")
         tff_label.set_halign(Gtk.Align.START)
@@ -885,7 +1007,35 @@ class TFANWindow(Adw.ApplicationWindow):
 
     def _update_brain_metrics(self, m: Dict[str, Any]) -> None:
         """Update the brain HUD bars and cards."""
-        # Progress bars
+        # Layer 1: Homeostatic Core needs
+        homeo_keys = ["n_energy", "n_integrity", "n_cogload", "n_social", "n_novelty", "n_safety"]
+        for key in homeo_keys:
+            if key in m and key in self.brain_bars:
+                try:
+                    self.brain_bars[key].set_value(float(m[key]))
+                except Exception:
+                    pass
+
+        # Drive and valence cards
+        if "drive_total" in m and "drive_total" in self.brain_metric_cards:
+            try:
+                drive = float(m["drive_total"])
+                self.brain_metric_cards["drive_total"].set_label(f"{drive:.3f}")
+                # Apply drive-based styling
+                self._apply_drive_styling(drive)
+            except Exception:
+                pass
+
+        if "valence" in m and "valence" in self.brain_metric_cards:
+            try:
+                valence = float(m["valence"])
+                self.brain_metric_cards["valence"].set_label(f"{valence:+.4f}")
+                # Apply valence-based styling
+                self._apply_valence_styling(valence)
+            except Exception:
+                pass
+
+        # UDK thermodynamic proxies
         for key in ["sigma_proxy", "epsilon_proxy", "kappa_proxy", "L_topo", "utcf", "lambda_topo"]:
             if key in m and key in self.brain_bars:
                 try:
@@ -905,6 +1055,44 @@ class TFANWindow(Adw.ApplicationWindow):
         nce_actions = m.get("nce_actions", [])
         if nce_actions:
             self.nce_list.update_actions(nce_actions)
+
+    def _apply_drive_styling(self, drive: float) -> None:
+        """Apply drive-based color coding to the homeostatic section."""
+        if not hasattr(self, "homeo_section"):
+            return
+
+        # Remove existing drive classes
+        for cls in ["drive-low", "drive-med", "drive-high"]:
+            self.homeo_section.remove_css_class(cls)
+
+        # Apply appropriate class based on drive level
+        if drive < 0.3:
+            self.homeo_section.add_css_class("drive-low")
+        elif drive < 0.6:
+            self.homeo_section.add_css_class("drive-med")
+        else:
+            self.homeo_section.add_css_class("drive-high")
+
+    def _apply_valence_styling(self, valence: float) -> None:
+        """Apply valence-based color coding to the valence label."""
+        if not hasattr(self, "valence_card"):
+            return
+
+        label = self.brain_metric_cards.get("valence")
+        if not label:
+            return
+
+        # Remove existing valence classes
+        for cls in ["valence-positive", "valence-negative", "valence-neutral"]:
+            label.remove_css_class(cls)
+
+        # Apply appropriate class based on valence
+        if valence > 0.001:
+            label.add_css_class("valence-positive")
+        elif valence < -0.001:
+            label.add_css_class("valence-negative")
+        else:
+            label.add_css_class("valence-neutral")
 
     def _update_training_metrics(self, m: Dict[str, Any]) -> None:
         """Update training-specific metrics."""

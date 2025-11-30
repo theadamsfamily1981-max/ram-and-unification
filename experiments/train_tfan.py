@@ -31,6 +31,8 @@ from tfan import (
     UDKController,
     CognitiveOffloadingSubsystem,
     TFANHudMetricsClient,
+    TfanBrainSnapshot,
+    TelemetryExporter,
     create_tfan_core,
     create_udk_controller,
     create_cos,
@@ -105,6 +107,7 @@ def train_epoch(
     dataset: SyntheticDataset,
     optimizer: optim.Optimizer,
     hud: TFANHudMetricsClient,
+    brain_exporter: TelemetryExporter,
     nce_actions: List[Dict[str, Any]],
     epoch: int,
     global_step: int,
@@ -135,6 +138,14 @@ def train_epoch(
         # Backward pass
         loss = losses["loss"]
         loss.backward()
+
+        # Compute gradient norm before step
+        grad_norm = 0.0
+        for p in model.parameters():
+            if p.grad is not None:
+                grad_norm += p.grad.data.norm(2).item() ** 2
+        grad_norm = grad_norm ** 0.5
+
         optimizer.step()
 
         # Compute accuracy
@@ -151,7 +162,18 @@ def train_epoch(
         beta0 = float(beta_k[0].item()) if len(beta_k) > 0 else 0.0
         beta1 = float(beta_k[1].item()) if len(beta_k) > 1 else 0.0
 
-        # Emit telemetry to GNOME cockpit
+        # Get current UTCF and update homeostatic core
+        utcf = float(udk.utcf_metrics_cost())
+        udk.update_homeostatic_core(
+            loss=loss.item(),
+            accuracy=accuracy,
+            grad_norm=grad_norm,
+        )
+
+        # Get homeostatic state
+        homeo_state = udk.homeostatic_core.get_state()
+
+        # Emit telemetry to GNOME cockpit (simple HUD)
         if global_step % log_every == 0:
             hud.update(
                 # Basic training metrics
@@ -168,13 +190,64 @@ def train_epoch(
                 beta0=beta0,
                 beta1=beta1,
                 # Costs and weights
-                utcf=float(udk.utcf_metrics_cost()),
+                utcf=utcf,
                 lambda_topo=float(losses["lambda_topo"]),
                 l_utility=float(losses["l_utility"].item()),
                 l_topo=float(losses["l_topo"].item()),
+                # Homeostatic core (Layer 1)
+                drive_total=homeo_state["drive_total"],
+                n_energy=homeo_state["n_energy"],
+                n_integrity=homeo_state["n_integrity"],
+                n_cogload=homeo_state["n_cogload"],
+                n_social=homeo_state["n_social"],
+                n_novelty=homeo_state["n_novelty"],
+                n_safety=homeo_state["n_safety"],
+                valence=homeo_state["valence"],
                 # NCE actions (pass the whole list)
                 nce_actions=nce_actions[-10:],  # Keep last 10
             )
+
+            # Also push full brain snapshot for detailed telemetry
+            snap = TfanBrainSnapshot(
+                step=global_step,
+                epoch=epoch,
+                wall_time=time.time(),
+                phase="train",
+                # Losses
+                loss_utility=float(losses["l_utility"].item()),
+                loss_topo=float(losses["l_topo"].item()),
+                loss_total=loss.item(),
+                accuracy=accuracy,
+                # Layer 1: Homeostatic Core
+                drive_total=homeo_state["drive_total"],
+                n_energy=homeo_state["n_energy"],
+                n_integrity=homeo_state["n_integrity"],
+                n_cogload=homeo_state["n_cogload"],
+                n_social=homeo_state["n_social"],
+                n_novelty=homeo_state["n_novelty"],
+                n_safety=homeo_state["n_safety"],
+                # Layer 2: TFF Topology
+                beta0=beta0,
+                beta1=beta1,
+                kappa_proxy=float(udk.state.kappa_proxy),
+                lambda_topo=float(losses["lambda_topo"]),
+                # Layer 3: UDK Thermodynamics
+                sigma_proxy=float(udk.state.sigma_proxy),
+                epsilon_proxy=float(udk.state.epsilon_proxy),
+                utcf=utcf,
+                # Layer 4: NCE/COS
+                offload_actions_total=len(nce_actions),
+                offload_actions_executed=sum(1 for a in nce_actions if a.get("executed")),
+                last_offload_action=nce_actions[-1]["action_type"] if nce_actions else "none",
+                # Affective state
+                valence=homeo_state["valence"],
+                arousal=abs(utcf),
+                # Training metadata
+                lr=optimizer.param_groups[0]["lr"],
+                grad_norm=grad_norm,
+                batch_size=batch["labels"].size(0),
+            )
+            brain_exporter.push(snap)
 
         # Periodic NCE check
         if global_step % nce_check_every == 0:
@@ -235,6 +308,9 @@ def train(
     # HUD metrics client (writes to XDG_RUNTIME_DIR/tfan_hud_metrics.json)
     hud = TFANHudMetricsClient(model_id="tfan_main")
 
+    # Full brain telemetry exporter (writes to XDG_RUNTIME_DIR/tfan_brain_metrics.json)
+    brain_exporter = TelemetryExporter()
+
     # NCE action history (shared list that gets updated)
     nce_actions: List[Dict[str, Any]] = []
 
@@ -253,7 +329,8 @@ def train(
 
     # Training loop
     print(f"\nStarting training for {num_epochs} epochs...")
-    print(f"HUD Metrics → {hud.path}")
+    print(f"HUD Metrics  → {hud.path}")
+    print(f"Brain Telemetry → {brain_exporter.path}")
     print("Launch the cockpit: python hud/tfan_gnome.py")
     print("=" * 60)
 
@@ -269,6 +346,7 @@ def train(
             dataset=dataset,
             optimizer=optimizer,
             hud=hud,
+            brain_exporter=brain_exporter,
             nce_actions=nce_actions,
             epoch=epoch,
             global_step=global_step,
@@ -279,15 +357,15 @@ def train(
 
         epoch_time = time.time() - epoch_start
 
-        # Get current metrics
+        # Get current metrics (includes Layer 1 homeostatic state)
         diag = udk.get_diagnostics()
 
         print(f"Epoch {epoch:3d}/{num_epochs} | "
               f"Step {global_step:5d} | "
               f"UTCF {diag['utcf']:.4f} | "
+              f"Drive {diag['drive_total']:.3f} | "
               f"σ {diag['sigma_proxy']:.4f} | "
               f"ε {diag['epsilon_proxy']:.4f} | "
-              f"λ_topo {diag['lambda_topo']:.4f} | "
               f"{epoch_time:.1f}s")
 
     print("=" * 60)
