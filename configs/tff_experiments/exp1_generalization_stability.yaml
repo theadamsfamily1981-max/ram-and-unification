@@ -1,0 +1,121 @@
+# Experiment Card 1: Generalization Stability (TFF/DAC Validation)
+#
+# Objective: Validate that the TFF's topological regularization (L_topo) and
+# UDK governance (κ_proxy) enforce stable decision boundaries and reduce
+# generalization variance under noise.
+
+experiment:
+  name: "generalization_stability"
+  description: "TFF/DAC validation for topological stability"
+  version: "1.0"
+
+# Data Configuration
+data:
+  task: "multimodal_classification"
+  dataset: "medical_diagnostics"  # or robotics_scene_analysis
+  modalities:
+    - text
+    - image
+    - sensor
+
+  # Train/val/test splits
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+
+  # Noise perturbation for robustness testing
+  noise:
+    gaussian_std: [0.0, 0.05, 0.1, 0.2]  # Test different noise levels
+    affine_scale: [1.0, 0.95, 0.9]
+    affine_rotation: [0.0, 5.0, 10.0]  # degrees
+
+# Model Variants
+models:
+  # Control: T-FAN backbone without topological regularization
+  model_a:
+    name: "control_no_topo"
+    tff_enabled: true
+    lambda_topo: 0.0  # Disabled
+    nce_enabled: false
+    udk_control:
+      kappa_tracking: true  # Still track for comparison
+      dynamic_lambda: false
+
+  # T-FAN with full TFF
+  model_b:
+    name: "tfan_full"
+    tff_enabled: true
+    lambda_topo: "dynamic"  # UDK-controlled
+    nce_enabled: true
+    udk_control:
+      kappa_tracking: true
+      dynamic_lambda: true
+      lambda_base: 0.1
+      instability_scale: 0.1
+      kappa_scale: 0.5
+
+# Training Configuration
+training:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 1e-4
+  optimizer: "adamw"
+  weight_decay: 0.01
+
+  # UDK update frequency
+  udk_update_every_steps: 100  # Update λ_topo every M steps
+  kappa_compute_every_steps: 500  # FIM eigenvalue computation (expensive)
+
+  # Early stopping
+  early_stopping:
+    patience: 10
+    monitor: "val_accuracy"
+    min_delta: 0.001
+
+# Evaluation Metrics
+evaluation:
+  # Primary metrics
+  generalization:
+    - accuracy
+    - f1_macro
+    - auc_roc
+
+  # Robustness (accuracy drop rate under noise)
+  robustness:
+    metric: "accuracy_drop_rate"
+    noise_levels: [0.05, 0.1, 0.2]
+
+  # Stability metrics (tracked throughout training)
+  stability:
+    - kappa_proxy  # Manifold curvature
+    - L_topo       # Betti number instability
+    - beta_0       # H0 Betti numbers
+    - beta_1       # H1 Betti numbers
+
+  # Evaluation frequency
+  eval_every_epochs: 5
+
+# Expected Outcomes
+expected_outcomes:
+  model_b_vs_model_a:
+    - "Lower average κ_proxy"
+    - "Smaller accuracy drop under noisy input"
+    - "More stable Betti numbers during training"
+    - "Better generalization to held-out test set"
+
+# Logging and Checkpoints
+logging:
+  wandb_project: "tfan_experiments"
+  wandb_run_name: "exp1_gen_stability"
+  log_every_steps: 50
+
+checkpoints:
+  save_every_epochs: 10
+  save_best: true
+  max_keep: 3
+
+# Hardware
+hardware:
+  device: "cuda"
+  mixed_precision: true
+  num_workers: 4

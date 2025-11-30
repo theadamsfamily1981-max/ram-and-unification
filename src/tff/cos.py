@@ -74,6 +74,35 @@ class ResourceCosts:
 
 
 @dataclass
+class NicheActionCosts:
+    """Cost structure for external niche construction actions.
+
+    Per T-FAN spec: Cost_ext for physical environment modifications.
+    """
+
+    deploy_sensor: float = 50.0  # Deploy external sensor
+    sidecar_logging: float = 5.0  # Spawn logging sidecar
+    spawn_process: float = 10.0  # Spawn parallel process
+    external_storage: float = 3.0  # Write to external storage
+    api_call: float = 2.0  # External API invocation
+
+
+@dataclass
+class NicheActionEffects:
+    """Expected effects of niche actions on σ_proxy.
+
+    Maps action type to expected sigma reduction factor (0-1).
+    E.g., 0.7 means σ_after = σ_current * 0.7 (30% reduction).
+    """
+
+    deploy_sensor: float = 0.7  # 30% reduction in avg sigma
+    sidecar_logging: float = 0.9  # 10% reduction
+    spawn_process: float = 0.85  # 15% reduction
+    external_storage: float = 0.95  # 5% reduction
+    api_call: float = 0.92  # 8% reduction
+
+
+@dataclass
 class NCEConfig:
     """Configuration for NCE decision policy."""
 
@@ -94,6 +123,12 @@ class NCEConfig:
     # Policy parameters
     exploration_rate: float = 0.1  # Random exploration
     ema_decay: float = 0.95  # For tracking statistics
+
+    # Niche Construction Economics (T-FAN spec)
+    # Decision rule: Do_Niche_Action if Δσ * H > Cost_ext
+    horizon_steps: int = 5000  # H: planning horizon
+    niche_action_costs: NicheActionCosts = field(default_factory=NicheActionCosts)
+    niche_action_effects: NicheActionEffects = field(default_factory=NicheActionEffects)
 
 
 @dataclass
@@ -335,6 +370,9 @@ class CognitiveOffloadingSubsystem(nn.Module):
         self.register_buffer("ema_internal_accuracy", torch.tensor(0.9))
         self.register_buffer("ema_offload_accuracy", torch.tensor(0.95))
         self.register_buffer("ema_latency_ratio", torch.tensor(1.0))
+
+        # NCE niche action log
+        self.niche_action_log: List[Dict[str, Any]] = []
 
         # Register default tools
         self._register_default_tools()
@@ -719,6 +757,140 @@ class CognitiveOffloadingSubsystem(nn.Module):
                 success=actual_accuracy > 0.5,
             )
 
+    # ==================== NCE Niche Construction Methods ====================
+
+    def estimate_external_cost(self, action_type: str) -> float:
+        """Estimate Cost_ext for a niche construction action.
+
+        Per T-FAN spec: Cost_ext is the energy/time cost of physical modification.
+
+        Args:
+            action_type: Type of niche action (e.g., 'deploy_sensor', 'sidecar_logging')
+
+        Returns:
+            External cost value
+        """
+        costs = self.config.niche_action_costs
+        return getattr(costs, action_type, 10.0)
+
+    def predict_sigma_after(self, action_type: str, current_sigma: float) -> float:
+        """Predict expected σ_proxy after niche action.
+
+        Per T-FAN spec: Offloading reduces internal tracking complexity,
+        lowering the cost of subsequent DAC revisions.
+
+        Args:
+            action_type: Type of niche action
+            current_sigma: Current σ_proxy value
+
+        Returns:
+            Predicted σ_proxy after action
+        """
+        effects = self.config.niche_action_effects
+        reduction_factor = getattr(effects, action_type, 1.0)
+        return current_sigma * reduction_factor
+
+    def evaluate_niche_action(
+        self,
+        action_type: str,
+        current_sigma: float,
+        execute: bool = False,
+    ) -> Dict[str, Any]:
+        """Evaluate and optionally execute a niche construction action.
+
+        Per T-FAN spec NCE decision rule:
+            Do_Niche_Action if Δσ * H > Cost_ext
+
+        Where:
+            - Δσ = current_sigma - predicted_sigma_after (sigma reduction)
+            - H = horizon_steps (planning horizon)
+            - Cost_ext = external action cost
+
+        Args:
+            action_type: Type of niche action to evaluate
+            current_sigma: Current σ_proxy value from UDK
+            execute: Whether to mark action as executed
+
+        Returns:
+            Dict with evaluation results and decision
+        """
+        # 1. Estimate reduction in internal cost (Δσ)
+        predicted_sigma_after = self.predict_sigma_after(action_type, current_sigma)
+        delta_sigma = current_sigma - predicted_sigma_after
+
+        # 2. Estimate external cost (Cost_ext)
+        cost_ext = self.estimate_external_cost(action_type)
+
+        # 3. Calculate benefit over horizon
+        H = self.config.horizon_steps
+        benefit = delta_sigma * H
+
+        # 4. Apply NCE criterion
+        should_act = benefit > cost_ext
+
+        result = {
+            "action_type": action_type,
+            "current_sigma": current_sigma,
+            "predicted_sigma_after": predicted_sigma_after,
+            "delta_sigma": delta_sigma,
+            "horizon_steps": H,
+            "benefit": benefit,
+            "cost_ext": cost_ext,
+            "should_act": should_act,
+            "executed": False,
+        }
+
+        if should_act and execute:
+            # Mark as executed (actual execution would integrate with robotics/control)
+            result["executed"] = True
+            self.niche_action_log.append({
+                "action_type": action_type,
+                "benefit": benefit,
+                "cost_ext": cost_ext,
+                "timestamp": len(self.niche_action_log),
+            })
+
+        return result
+
+    def get_recommended_niche_action(
+        self,
+        current_sigma: float,
+        available_actions: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Find best niche action given current σ_proxy.
+
+        Evaluates all available actions and returns the one with
+        highest positive net benefit (benefit - cost_ext).
+
+        Args:
+            current_sigma: Current σ_proxy value
+            available_actions: List of action types to consider
+
+        Returns:
+            Best action evaluation, or None if no action is beneficial
+        """
+        if available_actions is None:
+            available_actions = [
+                "deploy_sensor",
+                "sidecar_logging",
+                "spawn_process",
+                "external_storage",
+                "api_call",
+            ]
+
+        best_action = None
+        best_net_benefit = 0.0
+
+        for action_type in available_actions:
+            result = self.evaluate_niche_action(action_type, current_sigma)
+            net_benefit = result["benefit"] - result["cost_ext"]
+
+            if net_benefit > best_net_benefit:
+                best_net_benefit = net_benefit
+                best_action = result
+
+        return best_action
+
     def get_statistics(self) -> Dict[str, Any]:
         """Get current statistics."""
         total = self.total_decisions.item()
@@ -732,6 +904,7 @@ class CognitiveOffloadingSubsystem(nn.Module):
             "ema_offload_accuracy": self.ema_offload_accuracy.item(),
             "working_memory_load": self.working_memory.get_load(),
             "num_tools": len(self.tool_registry.tools),
+            "niche_actions_executed": len(self.niche_action_log),
         }
 
 
