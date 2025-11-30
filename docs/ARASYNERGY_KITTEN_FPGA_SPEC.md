@@ -1,211 +1,235 @@
-# Ara-SYNERGY Kitten FPGA Specification
+# Ara-SYNERGY "Kitten" FPGA SNN Fabric
 
-This document specifies the FPGA implementation of the "Kitten" SNN fabric
-for deployment on Stratix-10 or similar FPGAs.
+**Version**: v0.2
+**Status**: Draft hardware spec (software fabric + export already implemented)
+
+---
 
 ## 1. Overview
 
-The Kitten fabric is a 4-population spiking neural network with CI-compliant
-sparse connectivity. This spec covers:
+This document defines the FPGA implementation of the **Kitten SNN fabric** used by the Ara-SYNERGY project.
 
-1. **Export Format**: How PyTorch fabric data maps to FPGA configuration
-2. **PCIe Protocol**: Host-FPGA communication interface
-3. **HDL Module Hierarchy**: Verilog/SystemVerilog structure
-4. **Memory Layout**: BRAM allocation for weights and state
+The design maps the **software SNN fabric layer** (already implemented in the TF-A-N repo) onto a Stratix-10 class FPGA as a **fixed SNN tile**:
 
-## 2. Kitten Fabric Architecture
+- 4 populations: `input → hidden1 → hidden2 → output`
+- Projection graph:
+  - `input → hidden1`
+  - `hidden1 → hidden2`
+  - `hidden2 → output`
+  - `hidden1 → hidden1` (recur)
+  - `hidden2 → hidden2` (recur)
+- All synapses implemented as **CSR (Compressed Sparse Row) + low-rank masked weights**
+- Neuron model: **discrete-time LIF** (leaky integrate-and-fire)
+- Host access via **PCIe + AXI**, with DMA for input currents and spike outputs
 
-```
-┌─────────┐     ┌──────────┐     ┌──────────┐     ┌────────┐
-│  Input  │────▶│ Hidden1  │────▶│ Hidden2  │────▶│ Output │
-│  4096   │     │  4096    │     │  4096    │     │  2048  │
-└─────────┘     └──────────┘     └──────────┘     └────────┘
-                     │                │
-                     └────────────────┘
-                     (recurrent connections)
-```
+This spec is the contract between:
 
-### 2.1 Population Parameters
+- The **software fabric export** (Python → `artifacts/kitten_fpga/…`)
+- The **FPGA bitstream** and
+- The **host runtime** (Linux driver / user-space library)
 
-| Population | N    | v_th | alpha | Notes          |
-|------------|------|------|-------|----------------|
-| input      | 4096 | 1.0  | 0.95  | External input |
-| hidden1    | 4096 | 1.0  | 0.97  | + recurrent    |
-| hidden2    | 4096 | 1.0  | 0.97  | + recurrent    |
-| output     | 2048 | 0.9  | 0.98  | Readout layer  |
+---
 
-### 2.2 Projection Parameters (CI-Compliant)
+## 2. Compute Model
 
-| Projection           | N_pre | N_post | k  | r  | Sparsity |
-|---------------------|-------|--------|----|----|----------|
-| input_to_hidden1    | 4096  | 4096   | 64 | 32 | 98.4%    |
-| hidden1_to_hidden2  | 4096  | 4096   | 64 | 32 | 98.4%    |
-| hidden2_to_output   | 4096  | 2048   | 64 | 32 | 98.4%    |
-| hidden1_recurrent   | 4096  | 4096   | 32 | 16 | 99.2%    |
-| hidden2_recurrent   | 4096  | 4096   | 32 | 16 | 99.2%    |
+### 2.1 Populations
 
-**CI Gates**:
-- `r/N ≤ 0.02` (max rank ratio)
-- `k/N ≤ 0.02` (max degree ratio)
-- `sparsity ≥ 98%`
+Four neuron populations:
 
-## 3. Export Format
+| Name    | Size (N) |
+|---------|----------|
+| input   | 4096     |
+| hidden1 | 4096     |
+| hidden2 | 4096     |
+| output  | 2048     |
 
-### 3.1 Bundle Structure
+Each population consists of `N` LIF neurons, updated every **simulation step**:
 
-```
-kitten_fpga/
-├── config.json           # Fabric metadata
-├── proj_input_to_hidden1.bin
-├── proj_hidden1_to_hidden2.bin
-├── proj_hidden2_to_output.bin
-├── proj_hidden1_recurrent.bin
-└── proj_hidden2_recurrent.bin
+- Membrane potential `v[i]`
+- Input current/drive `I[i]`
+- Spike output `s[i] ∈ {0,1}`
+
+Reference LIF update (software):
+
+```python
+v = alpha * v + I - v_th * spike
+spike = (v >= v_th).float()
 ```
 
-### 3.2 config.json Schema
+The FPGA implementation may use a time-multiplexed update (e.g. 1–32 neurons updated per cycle) depending on resource budget.
 
-```json
-{
-  "fabric_name": "kitten_4pop",
-  "time_steps": 256,
-  "dt": 1.0,
-  "populations": [
-    {"name": "input", "N": 4096},
-    {"name": "hidden1", "N": 4096},
-    {"name": "hidden2", "N": 4096},
-    {"name": "output", "N": 2048}
-  ],
-  "total_neurons": 14336,
-  "total_synapses": 786432,
-  "projection_count": 5
-}
-```
+### 2.2 Projections
 
-### 3.3 Projection Binary Format
-
-Each `proj_*.bin` file:
+Each projection implements:
 
 ```
-[Header: 20 bytes]
-  N_pre:  int32 (4 bytes)
-  N_post: int32 (4 bytes)
-  k:      int32 (4 bytes)
-  r:      int32 (4 bytes)
-  nnz:    int32 (4 bytes)
-
-[CSR indptr: (N_post + 1) * 4 bytes]
-  int32 array
-
-[CSR indices: nnz * 4 bytes]
-  int32 array
-
-[Weight scale: 4 bytes]
-  float32
-
-[Quantized weights: nnz * 2 bytes]
-  int16 array (symmetric, scale provided above)
+I_post = I_post + W · s_pre
 ```
 
-### 3.4 Quantization
+Where:
+- `s_pre` = spike vector from pre-population
+- `W` = sparse weight matrix (CSR, low-rank masked in training)
+- `I_post` = accumulated current for post-population
 
-- **Format**: 16-bit symmetric quantization
-- **Scale**: `max_abs / 32767`
-- **Dequantize**: `value_float = value_int16 * scale`
+Projections in Kitten:
 
-## 4. PCIe Protocol
+| # | Name                 | Shape        |
+|---|----------------------|--------------|
+| 1 | input_to_hidden1     | 4096 → 4096  |
+| 2 | hidden1_to_hidden2   | 4096 → 4096  |
+| 3 | hidden2_to_output    | 4096 → 2048  |
+| 4 | hidden1_recur        | 4096 → 4096  |
+| 5 | hidden2_recur        | 4096 → 4096  |
 
-### 4.1 Memory-Mapped Registers (BAR0)
+On FPGA these appear as CSR projection engines sharing a common pattern.
 
-```c
-// Control/Status Registers
-#define REG_CTRL        0x00  // bit0: reset, bit1: start_step
-#define REG_STATUS      0x04  // bit0: busy, bit1: error
-#define REG_BATCH       0x08  // Batch size (uint32)
-#define REG_N_INPUT     0x0C  // Input population size
-#define REG_N_OUTPUT    0x10  // Output population size
+---
 
-// DMA Addresses
-#define REG_IN_ADDR_LO  0x20  // Input buffer address (lower 32 bits)
-#define REG_IN_ADDR_HI  0x24  // Input buffer address (upper 32 bits)
-#define REG_OUT_ADDR_LO 0x28  // Output buffer address (lower 32 bits)
-#define REG_OUT_ADDR_HI 0x2C  // Output buffer address (upper 32 bits)
+## 3. Host-FPGA Interface
 
-// Step Control
-#define REG_STEP_ID     0x30  // Step counter (incremented by host)
-#define REG_TIMEOUT_CYC 0x34  // Timeout in clock cycles (optional)
+### 3.1 PCIe + BAR Layout
+
+The FPGA exposes:
+- One BAR for control & status (BAR0, AXI-Lite)
+- DMA engines for:
+  - Input buffer (currents)
+  - Output buffer (spikes)
+
+All control is done by memory-mapped registers in BAR0.
+
+### 3.1.1 Control & Status Registers (BAR0)
+
+All offsets 32-bit aligned.
+
+| Offset | Name        | Dir | Description                              |
+|--------|-------------|-----|------------------------------------------|
+| 0x00   | CTRL        | R/W | Control bits                             |
+| 0x04   | STATUS      | R   | Status bits                              |
+| 0x08   | BATCH       | R/W | Batch size in samples                    |
+| 0x0C   | N_INPUT     | R/W | Number of input neurons (default 4096)   |
+| 0x10   | N_OUTPUT    | R/W | Number of output neurons (default 2048)  |
+| 0x14   | STEP_ID     | R/W | Step counter (host increments, FPGA echoes) |
+| 0x20   | IN_ADDR_LO  | R/W | Input buffer low 32 bits                 |
+| 0x24   | IN_ADDR_HI  | R/W | Input buffer high 32 bits                |
+| 0x28   | OUT_ADDR_LO | R/W | Output buffer low 32 bits                |
+| 0x2C   | OUT_ADDR_HI | R/W | Output buffer high 32 bits               |
+| 0x30   | TIMEOUT_CYC | R/W | Optional internal timeout (cycles)       |
+
+**Bitfields:**
+
+- **CTRL**:
+  - bit0: `SOFT_RESET` (write 1 to reset internal FSMs)
+  - bit1: `START_STEP` (write 1 to start a new step)
+
+- **STATUS**:
+  - bit0: `BUSY` (1 while step in progress)
+  - bit1: `ERROR` (1 if any internal error)
+  - bit2: `TIMEOUT` (1 if internal timeout triggered)
+  - bit3: `DONE` (1 when last step completed; clears on new START_STEP)
+
+### 3.2 Data Buffers
+
+Host allocates pinned / DMA-capable buffers:
+
+**Input current buffer**: float32 or Qm.n fixed-point (see 4.1)
+- Shape (logical): `[BATCH, N_INPUT]`
+- Layout: row-major, contiguous
+
+**Output spike buffer**: uint8 (bit-packed or byte-per-neuron)
+- Option A: 1 byte per neuron (0 or 1)
+- Option B: bit-packed (8 neurons per byte)
+
+The initial implementation uses 1 byte per neuron for simplicity.
+
+---
+
+## 4. Data Representation
+
+### 4.1 Fixed-Point Weights
+
+Synaptic weights are exported from Python as:
+- `values_q`: 16-bit signed fixed-point (e.g. Q1.14)
+- `scale_q`: per-projection scale factor (float32)
+
+On FPGA:
+
+```
+w_real ≈ values_q * 2^(-14) * scale_q
 ```
 
-### 4.2 Step Protocol
+This allows us to:
+- Pack weights tightly in BRAM (16 bits)
+- Keep the dynamic range of the trained model via `scale_q`
 
-1. **Host**: Fill input buffer with `[batch, N_input]` float32 currents
-2. **Host**: Increment `REG_STEP_ID`
-3. **Host**: Set `REG_CTRL.start_step = 1`
-4. **FPGA**:
-   - Clear `STATUS.busy = 0`, set `busy = 1`
-   - DMA-read input buffer
-   - Execute one SNN timestep (LIF + CSR MatVec)
-   - DMA-write spike buffer
-   - Clear `busy = 0`
-5. **Host**: Poll `REG_STATUS.busy` with timeout
-6. **Host**: Read output buffer `[batch, N_output]` bytes
+### 4.2 CSR Layout in BRAM
 
-### 4.3 Polling Implementation
+For each projection (pre → post):
 
-```c
-int wait_for_step_done(struct kitten_dev *dev, uint32_t expected_step_id, int timeout_ms) {
-    const int sleep_us = 50;
-    int waited_us = 0;
+Let:
+- `N_pre` = number of presynaptic neurons
+- `nnz` = number of non-zero synapses
 
-    while (waited_us < timeout_ms * 1000) {
-        uint32_t status = bar0_read32(dev, REG_STATUS);
-        uint32_t step_id = bar0_read32(dev, REG_STEP_ID);
+We store 3 main arrays in on-chip RAM:
 
-        bool busy = status & 0x1;
-        if (!busy && step_id == expected_step_id)
-            return 0;  // Success
+1. **indptr**: length `N_pre + 1`, 32-bit unsigned
+   - Row pointers (CSR)
+   - For pre neuron `j`, synapses live in `[indptr[j], indptr[j+1])`
 
-        usleep(sleep_us);
-        waited_us += sleep_us;
-    }
-    return -ETIMEDOUT;
-}
+2. **indices**: length `nnz`, 32-bit unsigned
+   - Post neuron indices `i`
+
+3. **values_q**: length `nnz`, 16-bit signed
+   - Quantized synaptic weights
+
+These are conceptually single-port or dual-port BRAMs with simple address/data interfaces.
+
+Each projection also has a small set of scalar registers:
+- `scale_q`: float32 or fixed-point (e.g. Q1.14)
+- `N_pre`, `N_post`: sizes
+
+These are filled by the fabric export script and a board-specific loader (JTAG/UART/PCIe).
+
+---
+
+## 5. Top-Level Module
+
+### 5.1 kitten_fpga_top
+
+Top entity (simplified):
+
+```systemverilog
+module kitten_fpga_top (
+    input  wire         pcie_refclk_p,
+    input  wire         pcie_refclk_n,
+    input  wire [15:0]  pcie_rx_p,
+    input  wire [15:0]  pcie_rx_n,
+    output wire [15:0]  pcie_tx_p,
+    output wire [15:0]  pcie_tx_n,
+    input  wire         sys_reset_n
+);
 ```
 
-### 4.4 Data Formats
+Internally instantiates:
+- `pcie_axi_bridge`
+- `kitten_control_regs` (BAR0 mapping)
+- `kitten_dma_in` / `kitten_dma_out`
+- `kitten_step_scheduler`
+- `kitten_fabric_tile`
 
-**Input**: Dense float32 currents `[batch, N_input]`
-- Size: `batch * 4096 * 4 = 16KB` per step (batch=1)
+Main responsibilities:
+1. Expose a PCIe endpoint
+2. Translate BAR0 accesses → control registers
+3. Orchestrate:
+   - Input DMA
+   - Fabric step
+   - Output DMA
+4. Report BUSY, DONE, ERROR bits to host
 
-**Output**: Byte-per-neuron spikes `[batch, N_output]`
-- Size: `batch * 2048 * 1 = 2KB` per step (batch=1)
-- Values: 0 = no spike, 1 = spike
+---
 
-## 5. HDL Module Hierarchy
+## 6. Fabric Tile
 
-### 5.1 Top-Level Structure
-
-```
-kitten_fpga_top
-├── pcie_axi_bridge          # PCIe to AXI conversion
-├── kitten_control_regs      # BAR0 register block
-├── kitten_dma_in            # Host → FPGA DMA engine
-├── kitten_dma_out           # FPGA → Host DMA engine
-├── kitten_step_scheduler    # Orchestrates one timestep
-└── kitten_fabric_tile       # The actual SNN fabric
-    ├── lif_population[0]    # Input population
-    ├── lif_population[1]    # Hidden1 population
-    ├── lif_population[2]    # Hidden2 population
-    ├── lif_population[3]    # Output population
-    ├── csr_projection[0]    # input_to_hidden1
-    ├── csr_projection[1]    # hidden1_to_hidden2
-    ├── csr_projection[2]    # hidden2_to_output
-    ├── csr_projection[3]    # hidden1_recurrent
-    ├── csr_projection[4]    # hidden2_recurrent
-    └── fabric_fsm           # Execution controller
-```
-
-### 5.2 kitten_fabric_tile
+### 6.1 kitten_fabric_tile Interface
 
 ```systemverilog
 module kitten_fabric_tile #(
@@ -217,120 +241,130 @@ module kitten_fabric_tile #(
     input  wire         clk,
     input  wire         rst,
 
-    // Control
+    // Step control
     input  wire         i_start,
     output wire         o_done,
 
-    // Input currents (AXIS)
-    input  wire [31:0]  i_input_current,
+    // Streaming input currents for `input` population
+    input  wire [31:0]  i_input_curr,
     input  wire         i_input_valid,
     output wire         o_input_ready,
 
-    // Output spikes (AXIS)
+    // Streaming spike outputs for `output` population
     output wire [7:0]   o_spike_data,
     output wire         o_spike_valid,
     input  wire         i_spike_ready
 );
 ```
 
-### 5.3 lif_population
+The tile is a step engine:
+- On `i_start`:
+  1. Load input currents from AXIS stream
+  2. Run projections and LIF updates for all populations
+  3. Emit packed spike bytes for output population
+  4. Assert `o_done`
 
-```systemverilog
-module lif_population #(
-    parameter N     = 4096,
-    parameter V_TH  = 16'h4000,  // 1.0 in Q15
-    parameter ALPHA = 16'h7999   // 0.95 in Q15
-) (
-    input  wire         clk,
-    input  wire         rst,
+The internal design is broken into:
+- Population modules (`lif_population`)
+- Projection engines (`csr_projection`)
+- Fabric scheduler FSM (`fabric_ctrl_fsm`)
 
-    // Control
-    input  wire         i_step_en,
-    output wire         o_step_done,
+---
 
-    // Current input (streaming)
-    input  wire [31:0]  i_current,
-    input  wire         i_current_valid,
-    output wire         o_current_ready,
+## 7. Control Flow for One Step
 
-    // Spike output (streaming)
-    output wire         o_spike,
-    output wire         o_spike_valid,
-    input  wire         i_spike_ready
-);
+### 7.1 High-Level Flow
 
-// Internal BRAMs
-// mem_v[N]: Membrane potential (32-bit fixed-point)
-// Processing: time-multiplexed over ceil(N/DSP_UNITS) cycles
+1. **Host**:
+   - Writes input buffer → `IN_ADDR_*`
+   - Writes output buffer → `OUT_ADDR_*`
+   - Programs `BATCH`, `N_INPUT`, `N_OUTPUT`
+   - Increments `STEP_ID`
+   - Writes `CTRL.START_STEP = 1`
+
+2. **FPGA (scheduler)**:
+   - Sets `STATUS.BUSY = 1`
+   - Launches `kitten_dma_in` to read input buffer
+   - Streams currents into `kitten_fabric_tile`
+   - Waits for `fabric_tile.o_done`
+   - Launches `kitten_dma_out` to write output spikes
+   - Sets `STATUS.DONE = 1`, clears `STATUS.BUSY`
+
+3. **Host**:
+   - Polls `STATUS.BUSY → 0` with timeout
+   - Verifies `STATUS.DONE == 1` and `STATUS.ERROR == 0`
+   - Reads output buffer
+
+### 7.2 Host Timeout (ncio-lock style)
+
+Host-side logic must not block indefinitely. A typical pattern:
+
+```c
+int wait_for_step_done(struct kitten_dev *dev,
+                       uint32_t step_id,
+                       int timeout_ms);
 ```
 
-### 5.4 csr_projection
+Implementation:
+- Poll `STATUS.BUSY` and `STEP_ID` every few microseconds
+- Abort if `timeout_ms` exceeded
+- Set error flag if `STATUS.ERROR` or `STATUS.TIMEOUT` is set
 
-```systemverilog
-module csr_projection #(
-    parameter N_PRE  = 4096,
-    parameter N_POST = 4096,
-    parameter K_MAX  = 64,
-    parameter ADDRW  = 13  // log2(N_POST + 1)
-) (
-    input  wire         clk,
-    input  wire         rst,
+---
 
-    // Control
-    input  wire         i_start,
-    output wire         o_done,
+## 8. Configuration Export
 
-    // Pre-synaptic spikes (bit vector or stream)
-    input  wire [N_PRE-1:0] i_spike_vec,
+The software fabric export (already implemented) writes:
+- `kitten_fabric_config.json`
+- Per-projection `.npy` arrays for `indptr`, `indices`, `values_q`
+- Per-projection `scale_q`
 
-    // BRAM interfaces for CSR data
-    output wire [ADDRW-1:0] o_indptr_addr,
-    input  wire [31:0]      i_indptr_data,
+This spec assumes a board-specific loader (e.g. small Python script + JTAG/PCIe utility) that:
+1. Parses `kitten_fabric_config.json`
+2. For each projection:
+   - Writes `indptr` → BRAM0
+   - Writes `indices` → BRAM1
+   - Writes `values_q` → BRAM2
+   - Writes `scale_q` → scalar register
 
-    output wire [ADDRW-1:0] o_indices_addr,
-    input  wire [31:0]      i_indices_data,
+After this one-time load at boot, the board is ready to execute steps.
 
-    output wire [ADDRW-1:0] o_values_addr,
-    input  wire [15:0]      i_values_data,
+---
 
-    // Scale factor (loaded at config time)
-    input  wire [31:0]      i_scale,
+## 9. Implementation Notes
 
-    // Post-synaptic current output (streaming)
-    output wire [31:0]      o_current,
-    output wire             o_current_valid,
-    input  wire             i_current_ready
-);
-```
+- **Time-multiplexing** is allowed:
+  - One `csr_projection` block reused for multiple projections
+  - One `lif_population` block reused for multiple populations
 
-**CSR MatVec Algorithm**:
-1. For each row `r` in 0..N_POST-1:
-   - Read `start = indptr[r]`, `end = indptr[r+1]`
-   - For `i` in `start..end`:
-     - Read `col = indices[i]`
-     - If `spike_vec[col] == 1`:
-       - Read `w = values[i]`
-       - Accumulate `current[r] += w * scale`
-2. Stream accumulated currents to output
+- The **functional requirement** is:
+  - Compute the same forward step as the software `SNNFabricModel`
+  - Within reasonable numeric variation from fixed-point quantization
 
-## 6. BRAM Allocation
+- **CI on hardware** can mimic software gates:
+  - Log per-step spike rate, sparsity, non-zero currents
+  - Optionally expose debug counters over extra BAR registers
 
-### 6.1 Per-Projection Storage
+---
 
-| Component | Size (bytes) | BRAMs (18Kb) |
-|-----------|-------------|--------------|
-| indptr    | (N_post+1)*4 | 1-2          |
-| indices   | nnz * 4      | varies       |
-| values    | nnz * 2      | varies       |
+## Appendix A: Memory Estimates
 
-### 6.2 Per-Population Storage
+### Per-Projection Storage
 
-| Component | Size (bytes) | BRAMs (18Kb) |
-|-----------|-------------|--------------|
-| v (membrane) | N * 4    | 2-4          |
-| refractory   | N * 1    | 0.5          |
+| Component | Size (bytes)           | BRAMs (18Kb) |
+|-----------|------------------------|--------------|
+| indptr    | (N_pre + 1) × 4        | 1-2          |
+| indices   | nnz × 4                | varies       |
+| values_q  | nnz × 2                | varies       |
 
-### 6.3 Total Estimates (Kitten)
+### Per-Population Storage
+
+| Component  | Size (bytes) | BRAMs (18Kb) |
+|------------|--------------|--------------|
+| v (membrane)| N × 4       | 2-4          |
+| refractory | N × 1        | 0.5          |
+
+### Total Estimates (Kitten)
 
 ```
 Projections:
@@ -342,93 +376,20 @@ Populations:
 Total: ~27 BRAMs minimum (well within Stratix-10 capacity)
 ```
 
-## 7. Execution Flow
+---
 
-### 7.1 Fabric FSM States
+## Appendix B: Performance Targets
 
-```
-IDLE → LOAD_INPUT → RUN_PROJECTIONS → UPDATE_NEURONS → WRITE_OUTPUT → DONE
-```
+| Metric              | Target         |
+|---------------------|----------------|
+| Latency per step    | < 1 ms         |
+| Throughput          | > 1000 steps/s |
+| Power               | < 50W          |
+| BRAM utilization    | < 50%          |
 
-### 7.2 RUN_PROJECTIONS Substates
+---
 
-```
-P0_INPUT_TO_H1 → P1_H1_TO_H2 → P2_H2_TO_OUT → P3_H1_RECUR → P4_H2_RECUR
-```
-
-Each projection substep:
-1. Read spike vector from pre-population
-2. Execute CSR MatVec
-3. Accumulate currents into post-population buffer
-
-### 7.3 UPDATE_NEURONS Substates
-
-```
-N0_INPUT → N1_HIDDEN1 → N2_HIDDEN2 → N3_OUTPUT
-```
-
-Each population update:
-1. For each neuron (time-multiplexed):
-   - Read `v`, `i_syn`, `refractory`
-   - Compute: `v_new = alpha * v + (1-alpha) * (v_rest + i_syn)`
-   - Check: `spike = (v_new >= v_th) && (refractory == 0)`
-   - Update: `v = spike ? v_reset : v_new`
-   - Write back
-
-## 8. Python Host API
-
-### 8.1 FpgaFabric Class
-
-```python
-class FpgaFabric:
-    def __init__(self, pcie_dev, N_input, N_output, batch):
-        self.dev = pcie_dev
-        self.batch = batch
-
-        # Allocate pinned buffers
-        self.in_buf = self.dev.alloc_pinned(batch * N_input * 4)
-        self.out_buf = self.dev.alloc_pinned(batch * N_output)
-
-        # Configure registers
-        self.dev.write_reg("BATCH", batch)
-        self.dev.write_reg("N_INPUT", N_input)
-        self.dev.write_reg("N_OUTPUT", N_output)
-        self.dev.write_reg("IN_ADDR", self.in_buf.phys_addr)
-        self.dev.write_reg("OUT_ADDR", self.out_buf.phys_addr)
-
-    def step(self, current: np.ndarray) -> np.ndarray:
-        """Execute one SNN timestep on FPGA."""
-        # Copy input
-        np.copyto(self.in_buf.view(), current)
-
-        # Trigger step
-        step_id = self.dev.increment_step_id()
-        self.dev.start_step()
-
-        # Poll with timeout
-        if self.dev.wait_done(step_id, timeout_ms=100) != 0:
-            raise TimeoutError("FPGA step timeout")
-
-        # Return spikes
-        return self.out_buf.view().copy()
-```
-
-### 8.2 Integration with Training
-
-```python
-# Select backend based on config
-if cfg.device == "fpga":
-    fabric = FpgaFabric.from_export("artifacts/kitten_fpga")
-    model = FpgaFabricModel(fabric)
-else:
-    fabric = build_fabric_from_config(cfg)
-    model = SNNFabricModel(fabric)
-
-# Same API for both
-out, aux = model(x)
-```
-
-## 9. Validation Checklist
+## Appendix C: Validation Checklist
 
 - [ ] Export bundle generates valid JSON + binary files
 - [ ] Config JSON matches fabric structure
@@ -440,76 +401,3 @@ out, aux = model(x)
 - [ ] 256-step simulation matches CPU within tolerance
 - [ ] Timeout handling works (no infinite blocking)
 - [ ] CI audit passes for exported fabric
-
-## 10. Performance Targets
-
-| Metric | Target |
-|--------|--------|
-| Latency per step | < 1 ms |
-| Throughput | > 1000 steps/sec |
-| Power | < 50W |
-| BRAM utilization | < 50% |
-
-## Appendix A: CSR MatVec Pseudocode
-
-```python
-def csr_matvec_fpga(indptr, indices, values, scale, spike_vec):
-    """
-    CSR sparse matrix-vector multiply for SNN projection.
-
-    indptr:  [N_post + 1] int32 - Row pointers
-    indices: [nnz] int32 - Column indices
-    values:  [nnz] int16 - Quantized weights
-    scale:   float32 - Dequantization scale
-    spike_vec: [N_pre] bit - Pre-synaptic spikes
-
-    Returns: [N_post] float32 - Post-synaptic currents
-    """
-    current = np.zeros(N_post, dtype=np.float32)
-
-    for row in range(N_post):
-        start = indptr[row]
-        end = indptr[row + 1]
-
-        acc = 0.0
-        for i in range(start, end):
-            col = indices[i]
-            if spike_vec[col]:
-                w = values[i] * scale
-                acc += w
-
-        current[row] = acc
-
-    return current
-```
-
-## Appendix B: LIF Update Pseudocode
-
-```python
-def lif_update_fpga(v, i_syn, refractory, alpha, v_th, v_reset):
-    """
-    Leaky Integrate-and-Fire neuron update.
-
-    All arrays: [N] neurons
-    Returns: (v_new, spike, refractory_new)
-    """
-    spike = np.zeros(N, dtype=np.uint8)
-    v_new = v.copy()
-    ref_new = refractory.copy()
-
-    for n in range(N):
-        if refractory[n] > 0:
-            ref_new[n] = refractory[n] - 1
-            continue
-
-        # Membrane update
-        v_new[n] = alpha * v[n] + (1 - alpha) * i_syn[n]
-
-        # Spike check
-        if v_new[n] >= v_th:
-            spike[n] = 1
-            v_new[n] = v_reset
-            ref_new[n] = REFRACTORY_STEPS
-
-    return v_new, spike, ref_new
-```
