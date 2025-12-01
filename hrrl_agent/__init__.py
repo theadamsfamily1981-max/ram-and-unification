@@ -21,6 +21,10 @@ TGSFN Substrate (V. Edge of Chaos):
 - Fast Learnable Time Warping (FLTW) with O(N·T) complexity
 - Avalanche exponent validation: α = 1.63 ± 0.04
 
+Documentation:
+- docs/TGSFN_IMPLEMENTATION_GUIDE.md - Master implementation blueprint
+- docs/FINITE_SIZE_SCALING.md - Finite-size scaling theory and derivations
+
 Experimental/Guarded:
 - Hyperbolic identity manifold (thresholds tunable)
 - DAU: Very conservative (tiny step, identity/value bans, logging)
@@ -145,7 +149,8 @@ from .criticality import (
     CriticalInitializer,
     EffectiveGainEstimator,
     AvalancheAnalyzer,
-    EIBalanceMonitor
+    EIBalanceMonitor,
+    predict_finite_size_alpha
 )
 
 # Antifragile Loop
@@ -260,6 +265,7 @@ __all__ = [
     "EffectiveGainEstimator",
     "AvalancheAnalyzer",
     "EIBalanceMonitor",
+    "predict_finite_size_alpha",
 
     # Antifragile
     "AntifragileLoop",
