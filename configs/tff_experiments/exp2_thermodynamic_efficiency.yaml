@@ -1,0 +1,158 @@
+# Experiment Card 2: Thermodynamic Efficiency (NCE/UDK Validation)
+#
+# Objective: Validate the NCE's core economic trade-off: external work
+# (Niche Construction) must yield a net reduction in internal thermodynamic
+# cost (σ).
+#
+# Decision rule: Do_Niche_Action if Δσ * H > Cost_ext
+
+experiment:
+  name: "thermodynamic_efficiency"
+  description: "NCE/UDK validation for sigma reduction trade-off"
+  version: "1.0"
+
+# Simulation Configuration
+simulation:
+  task: "industrial_logistics_monitoring"
+  description: "Continuous stateful task requiring frequent internal state sync"
+
+  # Time horizon
+  total_steps: 10000  # T timesteps
+  planning_horizon: 5000  # H for NCE decision
+
+  # DAC belief revision frequency
+  dac_revision_interval: 100  # Steps between DAC checks
+  dac_revision_cost_base: 10.0  # Base FLOPs cost for revision
+
+# Model Variants
+models:
+  # Model A: All processing internal (NCE disabled)
+  model_a:
+    name: "internal_only"
+    nce_enabled: false
+    description: "All high-frequency state tracking and complex analysis handled internally"
+
+    internal_processing:
+      dac_frequency: "high"  # Frequent DAC checks
+      state_sync_internal: true
+      external_sensors: false
+      sidecar_logging: false
+
+  # Model B: NCE-enabled (niche construction allowed)
+  model_b:
+    name: "niche_construction"
+    nce_enabled: true
+    description: "Allowed to perform external actions when COS policy justifies"
+
+    nce_config:
+      horizon_steps: 5000
+      available_actions:
+        - deploy_sensor
+        - sidecar_logging
+        - spawn_process
+        - external_storage
+        - api_call
+
+      # Action costs (Cost_ext)
+      action_costs:
+        deploy_sensor: 50.0
+        sidecar_logging: 5.0
+        spawn_process: 10.0
+        external_storage: 3.0
+        api_call: 2.0
+
+      # Expected σ reduction factors
+      action_effects:
+        deploy_sensor: 0.7   # 30% reduction
+        sidecar_logging: 0.9 # 10% reduction
+        spawn_process: 0.85  # 15% reduction
+        external_storage: 0.95
+        api_call: 0.92
+
+# σ_proxy Configuration
+sigma_proxy:
+  # Inputs for σ = log(1 + Cost(R)) / (ε + Precision_Gain)
+  cost_R_scale: 1.0  # FLOPs scaling
+  precision_gain_base: 0.1
+
+  # Tracking
+  ema_decay: 0.95
+  history_window: 100
+
+# Evaluation Metrics
+evaluation:
+  # Primary efficiency metric
+  efficiency:
+    metric: "total_sigma_accumulated"
+    description: "Σ σ_proxy over T steps"
+    compare: ["model_a", "model_b"]
+
+  # External cost tracking (Model B only)
+  external_cost:
+    metric: "total_cost_ext"
+    description: "Σ Cost_ext for all executed niche actions"
+
+  # Trade-off analysis
+  tradeoff:
+    metric: "sigma_reduction_vs_cost_ext"
+    description: "Compare Δσ * H vs Cost_ext for each action"
+
+  # Per-step metrics
+  per_step:
+    - sigma_proxy
+    - epsilon_proxy
+    - kappa_proxy
+    - niche_actions_executed
+
+  # Evaluation frequency
+  log_every_steps: 10
+
+# Expected Outcomes
+expected_outcomes:
+  model_b_vs_model_a:
+    - "Lower accumulated total σ_proxy over time"
+    - "Energy cost of external modification < reduction in internal cognitive cost"
+    - "Positive ROI: (Δσ * H) > Cost_ext for executed actions"
+
+  success_criteria:
+    sigma_reduction_ratio: 0.8  # Model B σ should be ≤80% of Model A
+    positive_roi_rate: 0.9  # 90% of actions should have positive ROI
+
+# Simulation Events
+events:
+  # Periodic spikes in complexity (to trigger niche actions)
+  complexity_spikes:
+    interval: 500
+    magnitude: 0.3
+    duration: 50
+
+  # Random DAC revision triggers
+  random_dac_triggers:
+    probability_per_step: 0.01
+
+  # External environment changes
+  environment_drift:
+    start_step: 3000
+    drift_rate: 0.01
+
+# Logging and Output
+logging:
+  wandb_project: "tfan_experiments"
+  wandb_run_name: "exp2_thermo_efficiency"
+  log_every_steps: 10
+
+  # Detailed action logs
+  log_niche_actions: true
+  log_dac_revisions: true
+  log_sigma_trajectory: true
+
+output:
+  save_trajectories: true
+  trajectory_file: "sigma_trajectories.csv"
+  action_log_file: "niche_actions.json"
+  summary_file: "efficiency_summary.json"
+
+# Hardware
+hardware:
+  device: "cpu"  # Simulation doesn't need GPU
+  random_seed: 42

@@ -1,0 +1,103 @@
+# TGSFN Base Configuration
+# Default settings that can be overridden by specific experiment configs
+#
+# Reference documentation:
+#   - docs/TGSFN_IMPLEMENTATION_GUIDE.md
+#   - docs/TGSFN_DEVELOPER_GUIDE.md
+#   - docs/FINITE_SIZE_SCALING.md
+
+# Device configuration
+device: "cuda"
+
+# Random seed for reproducibility
+seed: 42
+
+# Network architecture defaults
+network:
+  N: 4096                 # number of neurons (default)
+  p_exc: 0.8              # fraction excitatory (80/20 E/I balance)
+  tau_m: 20.0             # membrane time constant
+  v_th: 1.0               # firing threshold
+  v_reset: 0.0            # reset potential
+  w_scale: 0.02           # initial weight scale
+  init_sigma_sq: 100.0    # variance estimate for Π_q
+
+# Geometry layer (hyperbolic + Euclidean)
+geometry:
+  dim_hyper: 128          # hyperbolic dimensions (Poincaré ball)
+  dim_euclid: 64          # Euclidean dimensions
+  curvature: 1.0          # hyperbolic curvature (c=1 for unit ball)
+
+# Thermodynamic regularizer Π_q
+pi_q:
+  lambda_diss: 1.0        # dissipation coefficient (criticality dial)
+  lambda_J: 0.01          # Jacobian regularization coefficient
+
+# L5 Controller defaults
+controller:
+  enabled: false
+  pi_max: 1.0             # maximum dissipation threshold
+  g_tau_init: 0.1         # initial exploration temperature
+
+# Dynamic Axiomatic Update (DAU)
+dau:
+  enabled: false
+  lambda_crit: 1.0        # critical spectral norm threshold
+  step_size: 0.01         # axiom update step size
+  min_interval: 1000      # minimum steps between DAU updates
+
+# Simulation parameters
+simulation:
+  T_steps: 1000000        # timesteps per run (1e6 default)
+  batch_size: 1
+  burn_in_steps: 10000    # discard initial transient
+  checkpoint_interval: 100000
+
+# External input
+input:
+  mode: "random_drive"
+  noise_mean: 0.0
+  noise_std: 0.05
+
+# Avalanche analysis parameters
+avalanche:
+  threshold: 1            # minimum spikes to start avalanche
+  s_min: 5                # minimum size for power-law fit
+  s_max: 300              # maximum size for fit
+  t_min: 3                # minimum duration for fit
+  t_max: 300              # maximum duration for fit
+
+# Output and logging
+analysis:
+  save_raw_spikes: false
+  save_R_series: true
+  save_avalanches: true
+  log_interval: 10000
+  results_dir: "experiments/results"
+
+# Hardware constraints (for deployment)
+hardware:
+  precision: "float32"    # or "fixed16" for FPGA
+  recenter_interval: 1000000  # manifold recentering period
+  enable_quantization: false
+
+# Finite-size scaling experiment
+finite_size_scaling:
+  enabled: false
+  N_values: [1024, 2048, 4096, 8192, 16384]
+  lambda_diss: 1.2
+  T_steps_per_N: 1000000
+
+# Lambda_diss sweep experiment
+lambda_diss_sweep:
+  enabled: false
+  values: [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 5.0]
+  T_steps_per_value: 500000
+
+# Expected outputs (for validation)
+expected_metrics:
+  # C-DP mean-field universality class
+  tau_range: [1.5, 1.7]       # size exponent
+  alpha_range: [1.8, 2.2]     # duration exponent
+  gamma_sT_range: [1.8, 2.2]  # size-duration scaling
+  m_eff_range: [0.95, 1.05]   # branching ratio near criticality
