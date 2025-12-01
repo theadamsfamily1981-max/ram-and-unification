@@ -1,0 +1,75 @@
+# TGSFN-8B Canonical Config
+# Near-critical spiking field network with N = 8192
+# For avalanche + criticality experiments (no external task yet)
+#
+# Reference documentation:
+#   - docs/TGSFN_IMPLEMENTATION_GUIDE.md
+#   - docs/TGSFN_DEVELOPER_GUIDE.md
+#   - docs/FINITE_SIZE_SCALING.md
+
+experiment_name: "tgsfn8b_criticality_v0"
+
+device: "cuda"            # or "cpu"
+
+seed: 1234
+
+network:
+  N: 8192                 # number of neurons
+  p_exc: 0.8              # fraction excitatory
+  tau_m: 20.0             # membrane time constant (ms, modeled as dt=1 units)
+  v_th: 1.0               # firing threshold
+  v_reset: 0.0            # reset potential
+  w_scale: 0.02           # initial weight scale
+  init_sigma_sq: 100.0    # initial guess for variance in Π_q normalization
+
+geometry:
+  dim_hyper: 128          # hyperbolic latent dimensions
+  dim_euclid: 64          # euclidean latent dimensions
+
+pi_q:
+  lambda_diss: 1.2        # main dial for criticality
+  lambda_J: 0.01          # Jacobian stress regularization coefficient
+
+controller:
+  enabled: false          # set true later for L5 experiments
+  pi_max: 1.0             # nominal dissipation cap
+  g_tau_init: 0.1         # initial exploration scale
+
+dau:
+  enabled: false          # start disabled; enable later
+  lambda_crit: 1.0        # target spectral norm threshold
+  step_size: 0.01         # DAU update step size
+
+simulation:
+  T_steps: 2000000        # total timesteps per run (2e6)
+  batch_size: 1
+  burn_in_steps: 10000    # steps to discard before recording avalanches
+
+input:
+  mode: "random_drive"    # simple random external current
+  noise_mean: 0.0
+  noise_std: 0.05         # adjust to tune activity
+  # later: allow "patterned", "task", etc.
+
+avalanche:
+  s_min: 5                # min size included in fit
+  s_max: 300              # max size included in fit (avoid finite-size rollover)
+  t_min: 3                # min duration for duration fit
+  t_max: 300              # max duration
+
+analysis:
+  save_raw_spikes: false  # if true, save spike trains (large!)
+  save_R_series: true     # save population activity time series
+  save_avalanches: true   # save avalanche size/duration arrays
+  results_dir: "experiments/results/tgsfn8b_v0"
+
+finite_size_scaling:
+  enabled: false
+  N_values: [1024, 2048, 4096, 8192]
+  lambda_diss: 1.2
+  T_steps_per_N: 1000000
+
+lambda_diss_sweep:
+  enabled: false
+  values: [0.0, 0.5, 1.2, 2.0, 5.0]
+  T_steps_per_value: 500000
