@@ -16,6 +16,12 @@ Reference exponents:
 - Continuous Dynamics (Feigenbaum): λ_max = 0, δ ≈ 4.669
 
 TGSFN achieves α = 1.63 ± 0.04 (consistent with finite-size corrected 3/2)
+
+Finite-Size Scaling Theory (see docs/FINITE_SIZE_SCALING.md):
+- Asymptotic: α(N) = 3/2 + 1/(ln N + C) + O(N⁻¹)
+- Operational (N ~ 10³-10⁵): α(N) ≈ 3/2 + 6.6/√N
+- The 1/√N form is a high-quality transient fit, not the true asymptotic
+- Π_q minimization forces Δm(N) ∝ 1/√N subcriticality for stability
 """
 import torch
 import torch.nn as nn
@@ -146,6 +152,11 @@ class AvalancheAnalyzer:
     P(s) ~ s^(-α) with α = 3/2 (mean-field)
 
     Finite-size corrections give α ≈ 1.63 for neural networks.
+
+    Finite-Size Scaling (docs/FINITE_SIZE_SCALING.md):
+    - True asymptotic: α(N) = 3/2 + 1/(ln N + C)
+    - Operational fit: α(N) ≈ 3/2 + 6.6/√N for N ∈ [10³, 10⁵]
+    - The observed α = 1.63 is NOT an error but expected finite-size behavior
     """
 
     def __init__(self, config: CriticalityConfig):
@@ -244,6 +255,44 @@ class AvalancheAnalyzer:
             return False, f"Subcritical: α={alpha:.3f} < {target - tol:.2f}"
         else:
             return False, f"Supercritical: α={alpha:.3f} > {target + tol:.2f}"
+
+
+def predict_finite_size_alpha(N: int, use_asymptotic: bool = False) -> float:
+    """
+    Predict expected avalanche exponent for network size N.
+
+    Implements the finite-size scaling theory from docs/FINITE_SIZE_SCALING.md.
+
+    The Logarithmic Convergence Theorem establishes:
+    - True asymptotic: α(N) = 3/2 + 1/(ln N + C) + O(N⁻¹)
+    - Operational fit: α(N) ≈ 3/2 + 6.6/√N for N ∈ [10³, 10⁵]
+
+    Args:
+        N: Network size (number of neurons)
+        use_asymptotic: If True, use asymptotic form; else use operational fit
+
+    Returns:
+        Predicted avalanche size exponent α
+
+    Example:
+        >>> predict_finite_size_alpha(4096)  # Typical TGSFN size
+        1.603...
+        >>> predict_finite_size_alpha(8192)
+        1.572...
+    """
+    MEAN_FIELD_ALPHA = 1.5
+    OPERATIONAL_CONSTANT = 6.6  # Empirically derived from TGSFN simulations
+    ASYMPTOTIC_C = 2.5  # System-dependent constant
+
+    if N < 1:
+        raise ValueError(f"Network size must be positive, got {N}")
+
+    if use_asymptotic or N >= 1e6:
+        # True asymptotic form: α(N) = 3/2 + 1/(ln N + C)
+        return MEAN_FIELD_ALPHA + 1.0 / (math.log(N) + ASYMPTOTIC_C)
+    else:
+        # Operational phenomenological fit: α(N) = 3/2 + c/√N
+        return MEAN_FIELD_ALPHA + OPERATIONAL_CONSTANT / math.sqrt(N)
 
 
 class EIBalanceMonitor:
