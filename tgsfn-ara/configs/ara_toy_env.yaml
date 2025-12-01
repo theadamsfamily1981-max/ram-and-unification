@@ -1,0 +1,67 @@
+# Ara Agent Toy Environment Configuration
+
+# Environment
+environment:
+  type: "grid_world"
+  grid_size: 10
+  n_goals: 3
+  n_hazards: 5
+  max_steps: 500
+
+# Agent architecture
+agent:
+  obs_dim: 8               # Observation dimension
+  action_dim: 4            # Action dimension
+  identity_dim: 16         # Identity manifold dimension
+
+# TGSFN backend
+snn:
+  n_neurons: 128           # SNN neurons
+  ei_ratio: 0.8            # E:I ratio
+  connectivity: 0.1        # Connection probability
+  tau_mem: 20.0            # Membrane time constant
+  tau_syn: 5.0             # Synaptic time constant
+
+# Identity manifold
+identity:
+  curvature: 1.0           # Poincaré ball curvature
+  init_scale: 0.01         # Initial identity scale
+  update_rate: 0.01        # Identity update step size
+
+# Homeostasis
+homeostasis:
+  n_needs: 4               # Number of internal needs
+  beta: 1.0                # Free energy temperature
+  ema_decay: 0.99          # Need update smoothing
+  setpoint_lr: 0.001       # Setpoint adaptation rate
+  need_names:
+    - "energy"
+    - "novelty"
+    - "safety"
+    - "progress"
+
+# L5 Controller
+controller:
+  pi_max: 1.0              # Maximum entropy production
+  action_scale: 1.0        # Action magnitude scaling
+  throttle_smoothing: 0.1  # Throttle EMA decay
+  use_riemannian: true     # Riemannian projection
+
+# DAU
+dau:
+  enabled: true
+  lambda_crit: 1.5         # Critical threshold
+  adjustment_rate: 0.01    # Correction rate
+  cooldown_steps: 10       # Cooldown between adjustments
+  spectral_target: 0.99    # Target spectral norm
+
+# Training/evaluation
+run:
+  episodes: 10             # Number of episodes
+  seed: 42
+  verbose: false
+
+# Logging
+logging:
+  log_interval: 100        # Steps between logs
+  log_dir: "./logs/ara_toy"

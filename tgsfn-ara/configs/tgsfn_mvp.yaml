@@ -1,0 +1,61 @@
+# TGSFN MVP Configuration
+# Minimal viable configuration for TGSFN training
+
+# Network architecture
+network:
+  n_neurons: 256           # Number of LIF neurons
+  input_dim: 64            # Input dimension
+  output_dim: 4            # Number of output classes
+  ei_ratio: 0.8            # Excitatory ratio (E:I = 4:1)
+  connectivity: 0.1        # Connection probability
+  dt: 1.0                  # Timestep (ms)
+  tau_mem: 20.0            # Membrane time constant (ms)
+  tau_syn: 5.0             # Synaptic time constant (ms)
+  threshold: 1.0           # Spike threshold
+  reset: 0.0               # Reset potential
+
+# Training
+training:
+  epochs: 50
+  batch_size: 32
+  learning_rate: 1e-3
+  weight_decay: 1e-4
+  grad_clip: 1.0
+  seed: 42
+
+# Loss weights
+loss:
+  lambda_homeo: 0.1        # Homeostatic regularizer weight
+  lambda_diss: 0.01        # Dissipation (Pi_q) weight
+  lambda_J: 0.01           # Jacobian penalty weight
+  target_rate: 0.1         # Target firing rate
+
+# Data
+data:
+  seq_len: 100             # Sequence length
+  n_train: 800             # Training samples
+  n_val: 200               # Validation samples
+  n_classes: 4             # Number of classes
+
+# Criticality monitoring
+criticality:
+  buffer_size: 10000       # Activity buffer size
+  update_interval: 1000    # Steps between metric updates
+  tau_target: 1.5          # Target tau exponent
+  alpha_target: 2.0        # Target alpha exponent
+  branching_target: 1.0    # Target branching ratio
+  tolerance: 0.2           # Acceptable deviation
+
+# DAU settings
+dau:
+  enabled: true
+  lambda_crit: 1.5         # Critical Jacobian threshold
+  adjustment_rate: 0.01    # Correction learning rate
+  cooldown_steps: 10       # Steps between adjustments
+  spectral_target: 0.99    # Target spectral norm
+
+# Logging
+logging:
+  log_interval: 10         # Batches between logs
+  save_interval: 10        # Epochs between checkpoints
+  log_dir: "./logs/tgsfn_mvp"
